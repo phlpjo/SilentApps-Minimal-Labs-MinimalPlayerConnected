@@ -176,7 +176,8 @@ class RemotePlayer(
         quiet()
         if (entries.isEmpty()) return done()
         if (loaded == null || state == Player.STATE_ENDED) {
-            if (state != Player.STATE_ENDED) load(index, posMs, playWhenReady)
+            // Lädt gerade: das Ergebnis von load() richtet sich nach dem dann gültigen pwr
+            if (state != Player.STATE_ENDED && state != Player.STATE_BUFFERING) load(index, posMs, playWhenReady)
             return done()
         }
         val my = gen
@@ -357,6 +358,17 @@ class RemotePlayer(
                     loadedAt = SystemClock.elapsedRealtime()
                     pendingSeek = seekLater
                     if (!play) state = Player.STATE_READY
+                    // Während des Ladens wurde Play/Pause gedrückt
+                    if (pwr != play) {
+                        val seek = pendingSeek
+                        if (pwr) pendingSeek = null
+                        val want = pwr
+                        io.execute {
+                            try {
+                                if (want) { avt("Play", "Speed" to "1"); if (seek != null) seekRemote(seek) } else avt("Pause")
+                            } catch (_: Exception) { }
+                        }
+                    }
                     quiet()
                     invalidateState()
                 }

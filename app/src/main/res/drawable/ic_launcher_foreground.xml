@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Weißer Ring auf Schwarz (wie Minimal), darin ein Play-Dreieck als Linie -->
+<!-- Weißer Ring auf Schwarz (wie Minimal), darin ein Play-Dreieck; zwei Bögen oben rechts = Wiedergabe auf Lautsprechern -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp" android:height="108dp"
     android:viewportWidth="108" android:viewportHeight="108">
@@ -15,4 +15,16 @@
         android:strokeLineCap="round"
         android:fillColor="#00000000"
         android:pathData="M50,47.5 L50,60.5 L61,54 Z" />
+    <path
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="3"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000"
+        android:pathData="M64.14,32.25 A24,24 0 0,1 75.75,43.86" />
+    <path
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="3"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000"
+        android:pathData="M66.68,26.81 A30,30 0 0,1 81.19,41.32" />
 </vector>

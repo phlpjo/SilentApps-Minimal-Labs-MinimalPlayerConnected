@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Minimal Player – Datenschutz / Privacy</title>
+<title>Minimal Player Connected – Datenschutz / Privacy</title>
 <style>
   body{margin:0;background:#000;color:#fff;font:17px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif}
   main{max-width:720px;margin:0 auto;padding:56px 28px 80px}
@@ -17,11 +17,11 @@
 </style>
 </head>
 <body><main>
-<h1>Minimal Player</h1>
+<h1>Minimal Player Connected</h1>
 <p class="dim">Datenschutzerklärung · Stand: November 2026 · <a href="#en">English below</a></p>
 
 <h2>Kurz gesagt</h2>
-<p>Minimal Player erhebt keine personenbezogenen Daten, hat keinen Internetzugriff und gibt nichts an Dritte weiter. Alles bleibt auf deinem Gerät.</p>
+<p>Minimal Player Connected erhebt keine personenbezogenen Daten, verbindet sich mit keinem Server im Internet und gibt nichts an Dritte weiter. Nur wenn du selbst einen Lautsprecher in deinem WLAN auswählst, holt dieser den gerade gespielten Titel direkt vom Gerät ab.</p>
 
 <h2>Was lokal gespeichert wird</h2>
 <ul>
@@ -30,17 +30,24 @@
 <li>gemerkte Stellen in Hörbüchern</li>
 <li>deine Einstellungen</li>
 </ul>
-<p>Diese Daten verlassen das Gerät nicht. Die Android-Gerätesicherung ist für die App abgeschaltet. Deinstallieren oder „Speicher löschen“ entfernt alles.</p>
+<p>Diese Daten werden nicht hochgeladen oder weitergegeben. Die Android-Gerätesicherung ist für die App abgeschaltet. Deinstallieren oder „Speicher löschen“ entfernt alles.</p>
 
-<h2>Keine Übertragung</h2>
-<p>Die App besitzt keine Internet-Berechtigung. Es gibt keine Konten, keine Werbung, keine Analyse- oder Absturzdienste.</p>
+<h2>Netzwerk: nur dein Heimnetz</h2>
+<p>Die App verbindet sich ausschließlich mit Geräten im eigenen WLAN, nie mit Servern im Internet. Es gibt keine Konten, keine Werbung, keine Analyse- oder Absturzdienste.</p>
+<ul>
+<li><b>Suche:</b> Beim Öffnen von „Wiedergabe auf“ sendet die App eine UPnP-Suchanfrage (SSDP) ins lokale Netz und liest Name und Modell der antwortenden Lautsprecher. Nichts davon wird gespeichert.</li>
+<li><b>Abspielen:</b> Nach deiner Auswahl stellt ein kleiner Server im Gerät den gerade gespielten Titel (und ggf. das Cover) unter einer zufälligen, nicht erratbaren Adresse bereit; der Lautsprecher holt ihn dort ab. Der Server läuft nur, solange ein Lautsprecher verbunden ist.</li>
+<li>Was der Lautsprecher bzw. dessen Hersteller mit abgespielten Titeln macht, liegt außerhalb dieser App.</li>
+</ul>
 
 <h2>Berechtigungen</h2>
 <table>
 <tr><th>Berechtigung</th><th>Zweck</th></tr>
 <tr><td>Ordnerzugriff (von dir gewählt)</td><td>Lesen nur der Ordner, die du selbst auswählst</td></tr>
+<tr><td>Netzwerk (INTERNET)</td><td>nur Verbindungen zu Lautsprechern im eigenen WLAN; Android verlangt diese Berechtigung auch dafür</td></tr>
+<tr><td>WLAN-Multicast</td><td>Lautsprecher im WLAN finden, nur während der Suche</td></tr>
 <tr><td>Dienst im Vordergrund (Mediawiedergabe)</td><td>Wiedergabe im Hintergrund, Steuerung auf dem Sperrbildschirm und per Kopfhörer</td></tr>
-<tr><td>Wake Lock</td><td>keine Unterbrechung bei ausgeschaltetem Bildschirm</td></tr>
+<tr><td>Wake Lock</td><td>keine Unterbrechung bei ausgeschaltetem Bildschirm, auch beim Streamen</td></tr>
 <tr><td>Audio-Einstellungen</td><td>Equalizer und Lautstärke über 100 %, nur für die Wiedergabe dieser App</td></tr>
 <tr><td>Vibration</td><td>Bestätigung, wenn Schütteln den Schlaf-Timer neu startet</td></tr>
 <tr><td>Bewegungssensor</td><td>nur bei laufendem Schlaf-Timer, um Schütteln zu erkennen; nichts wird gespeichert</td></tr>
@@ -51,11 +58,11 @@
 
 <hr id="en">
 
-<h1>Minimal Player</h1>
+<h1>Minimal Player Connected</h1>
 <p class="dim">Privacy policy · November 2026</p>
 
 <h2>In short</h2>
-<p>Minimal Player collects no personal data, has no internet access and shares nothing with third parties. Everything stays on your device.</p>
+<p>Minimal Player Connected collects no personal data, connects to no server on the internet and shares nothing with third parties. Only when you pick a speaker in your Wi-Fi does that speaker fetch the current track directly from your device.</p>
 
 <h2>Stored locally</h2>
 <ul>
@@ -64,17 +71,24 @@
 <li>remembered audiobook positions</li>
 <li>your settings</li>
 </ul>
-<p>This data never leaves the device. Android device backup is turned off for this app. Uninstalling or clearing storage removes everything.</p>
+<p>This data is never uploaded or shared. Android device backup is turned off for this app. Uninstalling or clearing storage removes everything.</p>
 
-<h2>No transmission</h2>
-<p>The app has no internet permission. No accounts, no ads, no analytics or crash reporting.</p>
+<h2>Network: your home network only</h2>
+<p>The app only connects to devices in your own Wi-Fi, never to servers on the internet. No accounts, no ads, no analytics or crash reporting.</p>
+<ul>
+<li><b>Search:</b> when you open “Play on”, the app sends a UPnP search (SSDP) to the local network and reads name and model of the speakers that answer. Nothing is stored.</li>
+<li><b>Playback:</b> after you pick a speaker, a small server on the device offers the current track (and its cover) under a random, unguessable address; the speaker fetches it from there. The server only runs while a speaker is connected.</li>
+<li>What the speaker or its manufacturer does with played tracks is outside this app.</li>
+</ul>
 
 <h2>Permissions</h2>
 <table>
 <tr><th>Permission</th><th>Purpose</th></tr>
 <tr><td>Folder access (chosen by you)</td><td>read only the folders you select</td></tr>
+<tr><td>Network (INTERNET)</td><td>only connections to speakers in your own Wi-Fi; Android requires this permission for that too</td></tr>
+<tr><td>Wi-Fi multicast</td><td>find speakers in your Wi-Fi, only while searching</td></tr>
 <tr><td>Foreground service (media playback)</td><td>background playback, lock screen and headphone controls</td></tr>
-<tr><td>Wake lock</td><td>no interruption while the screen is off</td></tr>
+<tr><td>Wake lock</td><td>no interruption while the screen is off, also while streaming</td></tr>
 <tr><td>Audio settings</td><td>equalizer and volume above 100 %, only for this app's playback</td></tr>
 <tr><td>Vibration</td><td>confirms when shaking restarts the sleep timer</td></tr>
 <tr><td>Motion sensor</td><td>only while the sleep timer runs, to detect a shake; nothing is stored</td></tr>

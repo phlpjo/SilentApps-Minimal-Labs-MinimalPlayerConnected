@@ -1,15 +1,24 @@
-# Play-Store-Texte – Minimal Player
+# Play-Store-Texte – Minimal Player Connected
 
 ## Deutsch
 
-**Titel** (max. 30): Minimal Player
+**Titel** (max. 30): Minimal Player Connected
 
 **Kurzbeschreibung** (max. 80):
-Musik und Hörbücher aus deinen Ordnern. Offline, schwarz, ohne Tracking.
+Deine Musik und Hörbücher – auf dem Handy oder auf WLAN-Lautsprechern.
 
 **Beschreibung:**
 
-Minimal Player spielt deine eigene Musik- und Hörbuchsammlung – genau so, wie du sie in Ordnern abgelegt hast. Kein Konto, keine Cloud, keine Werbung, kein Internetzugriff.
+Minimal Player Connected spielt deine eigene Musik- und Hörbuchsammlung – genau so, wie du sie in Ordnern abgelegt hast. Auf dem Handy oder auf den Lautsprechern in deinem WLAN. Kein Konto, keine Cloud, keine Werbung.
+
+AUF LAUTSPRECHERN IM WLAN
+• Symbol im Player antippen, Lautsprecher wählen, fertig – die Musik läuft dort an derselben Stelle weiter
+• Multiroom-Lautsprecher und alle UPnP/DLNA-Geräte (viele AV-Receiver, Smart-TVs, Netzwerk-Lautsprecher)
+• Gruppierte Räume erscheinen als ein Eintrag
+• Lautstärke per Schieberegler oder mit den Lautstärketasten des Handys
+• Pause, Weiter und Lautstärke am Lautsprecher selbst werden übernommen
+• Zurück aufs Handy mit einem Tipp – Warteschlange und Stelle wandern mit
+• Die Dateien gehen direkt vom Handy zum Lautsprecher, ohne Umweg über das Internet
 
 MUSIK
 • Echte Ordneransicht wie am Computer, z. B. Interpret / Album – unabhängig von fehlerhaften Tags
@@ -41,24 +50,33 @@ RUHIGES DESIGN
 
 KLANG
 • Lautstärke von 50 bis 200 % – leise Hörbücher werden verständlich
-• Equalizer getrennt für Musik und Hörbücher, für Hörbücher ab Werk mit etwas weniger Bass
+• Equalizer getrennt für Musik und Hörbücher, für Hörbücher ab Werk mit etwas weniger Bass (auf dem Handy)
 • Oberfläche auf Deutsch und Englisch
 
 DEINE DATEN BLEIBEN BEI DIR
-Minimal Player hat keine Internet-Berechtigung. Du wählst die Ordner selbst über den Android-Speicherzugriff; die App sieht nur diese Ordner. Es werden keine Daten erhoben oder geteilt.
+Minimal Player Connected spricht nur mit Geräten in deinem eigenen WLAN, nie mit Servern im Internet. Du wählst die Ordner selbst über den Android-Speicherzugriff; die App sieht nur diese Ordner. Es werden keine Daten erhoben oder geteilt.
 
-Formate: alles, was Android abspielen kann, z. B. MP3, M4A/M4B, AAC, FLAC, OGG, Opus, WAV.
+Formate: alles, was Android abspielen kann, z. B. MP3, M4A/M4B, AAC, FLAC, OGG, Opus, WAV. Auf Lautsprechern: was der Lautsprecher kann (meist MP3, AAC/M4A, FLAC, WAV).
 
 ## English
 
-**Title** (max 30): Minimal Player
+**Title** (max 30): Minimal Player Connected
 
 **Short description** (max 80):
-Music and audiobooks from your own folders. Offline, black, no tracking.
+Your music and audiobooks – on your phone or on Wi-Fi speakers at home.
 
 **Full description:**
 
-Minimal Player plays your own music and audiobook collection – exactly the way you organised it in folders. No account, no cloud, no ads, no internet access.
+Minimal Player Connected plays your own music and audiobook collection – exactly the way you organised it in folders. On your phone or on the speakers in your Wi-Fi. No account, no cloud, no ads.
+
+ON SPEAKERS IN YOUR WI-FI
+• Tap the symbol in the player, pick a speaker, done – playback continues there at the same spot
+• Multi-room speakers and all UPnP/DLNA devices (many AV receivers, smart TVs, network speakers)
+• Grouped rooms show up as one entry
+• Volume with the slider or your phone's volume keys
+• Pause, skip and volume on the speaker itself are picked up
+• Back to the phone with one tap – queue and position come along
+• Files go straight from your phone to the speaker, never through the internet
 
 MUSIC
 • Real folder view like on your computer, e.g. Artist / Album – independent of broken tags
@@ -90,26 +108,27 @@ CALM DESIGN
 
 SOUND
 • Volume from 50 to 200 % – quiet audiobooks become clear
-• Separate equalizer for music and audiobooks, audiobooks come with slightly less bass
+• Separate equalizer for music and audiobooks, audiobooks come with slightly less bass (on the phone)
 • English and German interface
 
 YOUR DATA STAYS WITH YOU
-Minimal Player has no internet permission. You pick the folders yourself through Android's storage access; the app only sees those folders. No data is collected or shared.
+Minimal Player Connected only talks to devices in your own Wi-Fi, never to servers on the internet. You pick the folders yourself through Android's storage access; the app only sees those folders. No data is collected or shared.
 
-Formats: everything Android can play, e.g. MP3, M4A/M4B, AAC, FLAC, OGG, Opus, WAV.
+Formats: everything Android can play, e.g. MP3, M4A/M4B, AAC, FLAC, OGG, Opus, WAV. On speakers: whatever the speaker supports (usually MP3, AAC/M4A, FLAC, WAV).
 
 ## Angaben für die Play Console
 
 - **Kategorie:** Musik & Audio
-- **Preis:** 0,99 € (Vorschlag; bei dem Funktionsumfang wären auch 1,49–1,99 € vertretbar)
+- **Preis:** 1,99 € (Vorschlag: Minimal Player plus Streaming; mit 0,99 € als Minimal Player sauber abgestuft)
 - **Inhaltsbewertung (IARC):** Fragebogen-Kategorie „Alle anderen App-Typen“. Keine Gewalt, keine sexuellen Inhalte, keine Glücksspiele, keine Nutzerinteraktion, kein Teilen von Standort, keine Käufe in der App. Ergebnis: USK 0 / PEGI 3 / „Everyone“.
 - **Zielgruppe:** 13+ (nicht für Kinder konzipiert – vermeidet die Familienrichtlinien-Pflichten; Inhalte sind trotzdem unbedenklich)
 - **Werbung:** Nein
 - **App-Zugriff:** Alle Funktionen ohne Anmeldung verfügbar
 - **Nachrichten-App / Gesundheits-App / Behörden:** Nein
-- **Datenschutzerklärung-URL:** z. B. https://philipdecker.de/minimal-player/datenschutz (Datei: store/datenschutz.html)
+- **Datenschutzerklärung-URL:** z. B. https://philipdecker.de/minimal-player-connected/datenschutz (Datei: store/datenschutz.html)
 - **Vordergrund-Dienst (FOREGROUND_SERVICE_MEDIA_PLAYBACK):** In der Console unter „App-Inhalte → Berechtigungen für Dienste im Vordergrund“ angeben: *Mediawiedergabe – spielt vom Nutzer gestartete Audiodateien weiter, wenn die App im Hintergrund ist oder der Bildschirm aus ist.* Ggf. kurzes Video verlangt: Titel starten, Bildschirm sperren, Wiedergabe läuft weiter, Steuerung auf dem Sperrbildschirm.
 
+- **Hinweis Markennamen:** Herstellernamen von Lautsprechern stehen bewusst nicht in den Texten (Play-Richtlinie zu fremden Marken). Wer „Sonos“ erwähnen will: nur sachlich als Kompatibilität („funktioniert mit …“), nie im Titel.
 - **Android Auto:** In der Play Console unter *Erweiterte Einstellungen → Formfaktoren* „Android Auto“ hinzufügen. Google prüft Auto-Apps gesondert (Medien-Qualitätsrichtlinien); Screenshots aus der Desktop-Head-Unit (DHU) werden verlangt.
 
 ## Screenshots
