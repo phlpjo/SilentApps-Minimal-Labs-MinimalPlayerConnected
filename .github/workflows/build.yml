@@ -88,3 +88,17 @@ jobs:
           name: MinimalPlayerConnected-1.0.${{ github.run_number }}
           path: out/*
           retention-days: 30
+
+      # Signierte Dateien zusätzlich in den privaten Branch „downloads“ (nur letzter Build, per git abrufbar)
+      - name: In Branch downloads ablegen
+        if: steps.key.outputs.signed == 'true'
+        run: |
+          git config user.name "build-bot"
+          git config user.email "build-bot@users.noreply.github.com"
+          cp out/* /tmp/
+          git checkout --orphan downloads
+          git rm -rfq . >/dev/null
+          cp /tmp/MinimalPlayerConnected-* .
+          git add MinimalPlayerConnected-*
+          git commit -qm "Build #${{ github.run_number }}"
+          git push -f origin downloads
