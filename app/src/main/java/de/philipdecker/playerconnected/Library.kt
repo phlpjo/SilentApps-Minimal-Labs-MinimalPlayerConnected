@@ -396,7 +396,7 @@ sealed interface Entry {
 
     data class File(val track: Track) : Entry {
         override val id get() = "f:${track.uri}"
-        override val label get() = track.title
+        override val label get() = Library.label(track)
     }
 }
 
@@ -626,7 +626,7 @@ object Library {
     suspend fun entries(root: String, path: String): List<Entry> = withContext(Dispatchers.IO) {
         val d = dao.dirs(root, path).sortedWith(compareBy(Natural) { it.name })
             .map { Entry.Folder(it.root, it.path, it.name, it.files, it.total) }
-        val f = dao.files(root, path).sortedWith(compareBy(Natural) { it.name }).map { Entry.File(it) }
+        val f = dao.files(root, path).sortedWith(fileOrder).map { Entry.File(it) }
         d + f
     }
 
@@ -682,10 +682,10 @@ object Library {
     suspend fun queue(key: String): List<Track> = withContext(Dispatchers.IO) {
         val k = Keys.parse(key) ?: return@withContext emptyList()
         when (k.kind) {
-            'd' -> dao.files(k.root, k.rest).sortedWith(compareBy(Natural) { it.name })
+            'd' -> dao.files(k.root, k.rest).sortedWith(fileOrder)
             'r' -> dao.subtree(k.root, k.rest).sortedWith { a, b ->
                 val d = comparePath(a.dir, b.dir)
-                if (d != 0) d else Natural.compare(a.name, b.name)
+                if (d != 0) d else fileOrder.compare(a, b)
             }
             'f' -> listOfNotNull(dao.byUri(k.rest))
             'x' -> listOf(dao.byUri(k.rest) ?: external(k.section, k.rest))
@@ -913,6 +913,10 @@ object Library {
         } else dao.forget(id)
         version.value++
     }
+
+    /** Reihenfolge der Dateien: nach Dateiname – bei „Titel aus Tags“ (Musik) nach dem angezeigten Namen, passend zur Buchstabenleiste */
+    val fileOrder: Comparator<Track> = Comparator { a, b -> Natural.compare(sortKey(a), sortKey(b)) }
+    private fun sortKey(t: Track): String = if (t.section == MUSIC && Prefs.get(app).tagTitles) label(t) else t.name
 
     /** Anzeigename eines Titels: Dateiname oder – wenn eingeschaltet (Musik) – „Interpret – Titel“ aus den Tags */
     fun label(t: Track): String {

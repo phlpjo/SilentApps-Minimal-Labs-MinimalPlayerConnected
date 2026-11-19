@@ -91,6 +91,8 @@ class RemotePlayer(
     private var ticks = 0
     private var released = false
     private var loadedAt = 0L
+    /** Länge laut Datei (Ersatz, falls der Lautsprecher keine meldet) */
+    private var fileDur = 0L
 
     private val moving get() = state == Player.STATE_READY && pwr
 
@@ -335,6 +337,7 @@ class RemotePlayer(
         index = i
         posMs = startMs.coerceAtLeast(0); posAt = SystemClock.elapsedRealtime()
         durMs = C.TIME_UNSET
+        fileDur = 0L
         state = Player.STATE_BUFFERING
         loaded = null
         sawPlaying = false
@@ -356,6 +359,8 @@ class RemotePlayer(
                     if (my != gen || released) return@post
                     loaded = pub.url
                     loadedAt = SystemClock.elapsedRealtime()
+                    if (pub.durationMs > 0) fileDur = pub.durationMs
+                    if (durMs <= 0 && fileDur > 0) durMs = fileDur
                     pendingSeek = seekLater
                     if (!play) state = Player.STATE_READY
                     // Während des Ladens wurde Play/Pause gedrückt
@@ -402,7 +407,9 @@ class RemotePlayer(
             if (album != null) append("<upnp:album>").append(album).append("</upnp:album>")
             if (pub.cover != null) append("<upnp:albumArtURI>").append(Upnp.esc(pub.cover)).append("</upnp:albumArtURI>")
             append("<upnp:class>object.item.audioItem.musicTrack</upnp:class>")
-            append("<res protocolInfo=\"").append(Upnp.esc(proto)).append("\">").append(Upnp.esc(pub.url)).append("</res>")
+            append("<res protocolInfo=\"").append(Upnp.esc(proto)).append('"')
+            if (pub.durationMs > 0) append(" duration=\"").append(Upnp.time(pub.durationMs)).append(".000\"")
+            append('>').append(Upnp.esc(pub.url)).append("</res>")
             append("</item></DIDL-Lite>")
         }
     }
@@ -487,7 +494,8 @@ class RemotePlayer(
             onLost(R.string.connect_taken)
             return
         }
-        if (dur > 0) durMs = dur
+        // Länge: vom Lautsprecher, sonst aus der Datei
+        if (dur > 0) durMs = dur else if (fileDur > 0) durMs = fileDur
         when (transport) {
             "PLAYING" -> {
                 sawPlaying = true

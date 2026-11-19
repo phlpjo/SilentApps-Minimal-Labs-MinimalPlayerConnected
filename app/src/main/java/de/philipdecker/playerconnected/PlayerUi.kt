@@ -151,7 +151,7 @@ fun PlayerScreen(ui: Actions, prefs: Prefs, now: NowPlaying) {
         T(where, size = 15.sp, color = Dim, maxLines = 1, minLines = 1, modifier = Modifier.floatIn(2))
         Spacer(Modifier.height(36.dp))
 
-        SeekBar(c, pos, dur, if (dur > 0) chapters.drop(1).map { it.start.toFloat() / dur } else emptyList())
+        SeekBar(c, pos, dur, if (dur > 0) chapters.drop(1).map { it.start.toFloat() / dur } else emptyList(), item.mediaId)
 
         Spacer(Modifier.height(30.dp))
         Row(Modifier.fillMaxWidth().floatIn(4), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
@@ -262,18 +262,25 @@ private fun ChapterSheet(chapters: List<Chapter>, current: Int, onPick: (Chapter
     }
 }
 
-/** Fortschrittslinie: antippen oder ziehen zum Springen; Kapitel als Striche; Zeiten darunter */
+/**
+ * Fortschritt als Wellenform (Lautstärkeverlauf wie bei SoundCloud): gespielter Teil hell, Rest gedämpft,
+ * darunter ein leiser Spiegel. Antippen oder ziehen zum Springen; Kapitel als Striche. Solange der Verlauf
+ * noch berechnet wird (oder die Datei nicht lesbar ist), erscheint die schlichte Linie.
+ */
 @Composable
-private fun SeekBar(c: Player, pos: Long, dur: Long, marks: List<Float>) {
+private fun SeekBar(c: Player, pos: Long, dur: Long, marks: List<Float>, uri: String) {
+    val ctx = LocalContext.current
+    val wave by produceState<FloatArray?>(null, uri) { value = Waves.of(ctx, uri) }
     var dragFrac by remember { mutableStateOf<Float?>(null) }
     val frac = dragFrac ?: if (dur > 0) (pos.toFloat() / dur).coerceIn(0f, 1f) else 0f
     val shown = dragFrac?.let { (it * dur).toLong() } ?: pos
+    val show = androidx.compose.animation.core.animateFloatAsState(if (wave != null) 1f else 0f, androidx.compose.animation.core.tween(500), label = "wave").value
 
     Column(Modifier.fillMaxWidth().floatIn(3)) {
         Box(
             Modifier
                 .fillMaxWidth()
-                .height(40.dp)
+                .height(72.dp)
                 .pointerInput(dur) {
                     detectHorizontalDragGestures(
                         onDragStart = { o -> dragFrac = (o.x / size.width).coerceIn(0f, 1f) },
@@ -286,22 +293,51 @@ private fun SeekBar(c: Player, pos: Long, dur: Long, marks: List<Float>) {
                 },
         ) {
             Canvas(Modifier.fillMaxSize()) {
-                val y = size.height / 2f
-                val x = size.width * frac
-                val w = 1.5.dp.toPx()
-                drawLine(Line, Offset(0f, y), Offset(size.width, y), w, StrokeCap.Round)
+                val w = wave
+                val px = size.width * frac
+                val base = size.height * 0.7f
+                if (w == null || show < 1f) {
+                    // Schlichte Linie (vor dem Einblenden der Wellenform)
+                    val a = 1f - show
+                    val lw = 1.5.dp.toPx()
+                    drawLine(Line.copy(alpha = Line.alpha * a), Offset(0f, base), Offset(size.width, base), lw, StrokeCap.Round)
+                    drawLine(Ink.copy(alpha = 0.9f * a), Offset(0f, base), Offset(px, base), lw, StrokeCap.Round)
+                    val r = if (dragFrac != null) 7.dp.toPx() else 4.5.dp.toPx()
+                    drawCircle(Brush.radialGradient(listOf(Ink.copy(alpha = 0.22f * a), Color.Transparent), Offset(px, base), r * 3.2f), r * 3.2f, Offset(px, base))
+                    drawCircle(Ink.copy(alpha = a), r, Offset(px, base))
+                }
+                if (w != null) {
+                    val bar = 2.dp.toPx()
+                    val gap = 1.2.dp.toPx()
+                    val n = ((size.width + gap) / (bar + gap)).toInt().coerceAtLeast(1)
+                    val up = base - 2.dp.toPx()
+                    val down = size.height - base - 2.dp.toPx()
+                    val rest = Ink.copy(alpha = 0.42f * show)
+                    val done = Ink.copy(alpha = show)
+                    for (i in 0 until n) {
+                        val x = i * (bar + gap)
+                        val a = i * w.size / n
+                        val b = ((i + 1) * w.size / n).coerceAtLeast(a + 1).coerceAtMost(w.size)
+                        var v = 0f
+                        for (j in a until b) if (w[j] > v) v = w[j]
+                        val h = (0.05f + 0.95f * v) * show
+                        val col = if (x + bar / 2f <= px) done else rest
+                        drawRect(col, Offset(x, base - h * up), androidx.compose.ui.geometry.Size(bar, h * up))
+                        drawRect(col.copy(alpha = col.alpha * 0.32f), Offset(x, base + 1.5.dp.toPx()), androidx.compose.ui.geometry.Size(bar, h * down))
+                    }
+                    if (dragFrac != null) {
+                        drawLine(Ink, Offset(px, 0f), Offset(px, size.height), 1.5.dp.toPx())
+                        drawCircle(Brush.radialGradient(listOf(Ink.copy(alpha = 0.25f), Color.Transparent), Offset(px, base), 22.dp.toPx()), 22.dp.toPx(), Offset(px, base))
+                    }
+                }
                 for (m in marks) {
                     val mx = size.width * m
-                    drawLine(Faint, Offset(mx, y - 4.dp.toPx()), Offset(mx, y + 4.dp.toPx()), 1.dp.toPx())
+                    drawLine(Faint, Offset(mx, size.height - 6.dp.toPx()), Offset(mx, size.height), 1.dp.toPx())
                 }
-                drawLine(Ink.copy(alpha = 0.9f), Offset(0f, y), Offset(x, y), w, StrokeCap.Round)
-                val r = if (dragFrac != null) 7.dp.toPx() else 4.5.dp.toPx()
-                drawCircle(Brush.radialGradient(listOf(Ink.copy(alpha = 0.22f), Color.Transparent), Offset(x, y), r * 3.2f), r * 3.2f, Offset(x, y))
-                drawCircle(Ink, r, Offset(x, y))
             }
         }
         Row(Modifier.fillMaxWidth()) {
-            T(clock(shown), size = 13.sp, color = Dim, spacing = 0.8.sp)
+            T(clock(shown), size = 13.sp, color = if (dragFrac != null) Ink else Dim, spacing = 0.8.sp)
             Spacer(Modifier.weight(1f))
             if (dur > 0) T("−" + clock(dur - shown), size = 13.sp, color = Faint, spacing = 0.8.sp)
         }

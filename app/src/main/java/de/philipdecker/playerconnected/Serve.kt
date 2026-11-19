@@ -26,7 +26,7 @@ import java.util.concurrent.Executors
  * es gibt keine Liste und kein Verzeichnis. Unterstützt Range-Anfragen (Spulen).
  */
 object Serve {
-    class Published(val url: String, val mime: String, val cover: String?)
+    class Published(val url: String, val mime: String, val cover: String?, val durationMs: Long)
 
     private class Entry(val uri: Uri, val mime: String)
 
@@ -85,7 +85,17 @@ object Serve {
                 "http://$ip:$port/c/$c.jpg"
             }
         } catch (_: Throwable) { null }
-        return Published("http://$ip:$port/a/$t.$ext", mime, coverUrl)
+        return Published("http://$ip:$port/a/$t.$ext", mime, coverUrl, durationOf(ctx, item.mediaId, uri))
+    }
+
+    /** Länge der Datei (manche Lautsprecher melden keine) – aus der Bibliothek, sonst aus der Datei */
+    private fun durationOf(ctx: Context, id: String, uri: Uri): Long {
+        try { runBlocking { Library.dao.byUri(id) }?.duration?.takeIf { it > 0 }?.let { return it } } catch (_: Throwable) { }
+        val r = android.media.MediaMetadataRetriever()
+        return try {
+            r.setDataSource(ctx, uri)
+            r.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L
+        } catch (_: Throwable) { 0L } finally { try { r.release() } catch (_: Throwable) { } }
     }
 
     fun isOurs(url: String?): Boolean = url != null && url.contains("/a/") && files.keys.any { url.contains(it) }
