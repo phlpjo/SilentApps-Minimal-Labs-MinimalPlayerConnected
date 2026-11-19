@@ -312,7 +312,7 @@ class PlaybackService : MediaLibraryService() {
 
     /** Aktuelle Stelle eines Hörbuchs speichern: für den Ordner und für die Datei */
     private fun save() {
-        if (!::player.isInitialized) return
+        if (!::exo.isInitialized) return
         val item = player.currentMediaItem ?: return
         val ex = item.mediaMetadata.extras ?: return
         if (ex.getInt("section", MUSIC) != BOOKS) return
