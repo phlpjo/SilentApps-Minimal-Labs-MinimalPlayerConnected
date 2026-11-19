@@ -13,7 +13,7 @@ Minimal Player Connected spielt deine eigene Musik- und Hörbuchsammlung – gen
 
 AUF LAUTSPRECHERN IM WLAN
 • Symbol im Player antippen, Lautsprecher wählen, fertig – die Musik läuft dort an derselben Stelle weiter
-• Multiroom-Lautsprecher und alle UPnP/DLNA-Geräte (viele AV-Receiver, Smart-TVs, Netzwerk-Lautsprecher)
+• Funktioniert mit Sonos und allen UPnP/DLNA-Geräten (viele AV-Receiver, Smart-TVs, Netzwerk-Lautsprecher)
 • Gruppierte Räume erscheinen als ein Eintrag
 • Lautstärke per Schieberegler oder mit den Lautstärketasten des Handys
 • Pause, Weiter und Lautstärke am Lautsprecher selbst werden übernommen
@@ -71,7 +71,7 @@ Minimal Player Connected plays your own music and audiobook collection – exact
 
 ON SPEAKERS IN YOUR WI-FI
 • Tap the symbol in the player, pick a speaker, done – playback continues there at the same spot
-• Multi-room speakers and all UPnP/DLNA devices (many AV receivers, smart TVs, network speakers)
+• Works with Sonos and all UPnP/DLNA devices (many AV receivers, smart TVs, network speakers)
 • Grouped rooms show up as one entry
 • Volume with the slider or your phone's volume keys
 • Pause, skip and volume on the speaker itself are picked up
@@ -119,7 +119,7 @@ Formats: everything Android can play, e.g. MP3, M4A/M4B, AAC, FLAC, OGG, Opus, W
 ## Angaben für die Play Console
 
 - **Kategorie:** Musik & Audio
-- **Preis:** 1,99 € (Vorschlag: Minimal Player plus Streaming; mit 0,99 € als Minimal Player sauber abgestuft)
+- **Preis:** 1,99 €
 - **Inhaltsbewertung (IARC):** Fragebogen-Kategorie „Alle anderen App-Typen“. Keine Gewalt, keine sexuellen Inhalte, keine Glücksspiele, keine Nutzerinteraktion, kein Teilen von Standort, keine Käufe in der App. Ergebnis: USK 0 / PEGI 3 / „Everyone“.
 - **Zielgruppe:** 13+ (nicht für Kinder konzipiert – vermeidet die Familienrichtlinien-Pflichten; Inhalte sind trotzdem unbedenklich)
 - **Werbung:** Nein
@@ -128,7 +128,7 @@ Formats: everything Android can play, e.g. MP3, M4A/M4B, AAC, FLAC, OGG, Opus, W
 - **Datenschutzerklärung-URL:** z. B. https://philipdecker.de/minimal-player-connected/datenschutz (Datei: store/datenschutz.html)
 - **Vordergrund-Dienst (FOREGROUND_SERVICE_MEDIA_PLAYBACK):** In der Console unter „App-Inhalte → Berechtigungen für Dienste im Vordergrund“ angeben: *Mediawiedergabe – spielt vom Nutzer gestartete Audiodateien weiter, wenn die App im Hintergrund ist oder der Bildschirm aus ist.* Ggf. kurzes Video verlangt: Titel starten, Bildschirm sperren, Wiedergabe läuft weiter, Steuerung auf dem Sperrbildschirm.
 
-- **Hinweis Markennamen:** Herstellernamen von Lautsprechern stehen bewusst nicht in den Texten (Play-Richtlinie zu fremden Marken). Wer „Sonos“ erwähnen will: nur sachlich als Kompatibilität („funktioniert mit …“), nie im Titel.
+- **Hinweis Markennamen:** „Sonos“ steht nur sachlich als Kompatibilität („funktioniert mit …“) in der Beschreibung – nie im Titel, in der Kurzbeschreibung oder in Grafiken. Sonos ist eine Marke der Sonos, Inc.; die App ist nicht mit Sonos verbunden.
 - **Android Auto:** In der Play Console unter *Erweiterte Einstellungen → Formfaktoren* „Android Auto“ hinzufügen. Google prüft Auto-Apps gesondert (Medien-Qualitätsrichtlinien); Screenshots aus der Desktop-Head-Unit (DHU) werden verlangt.
 
 ## Screenshots
