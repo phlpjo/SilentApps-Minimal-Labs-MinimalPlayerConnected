@@ -8,7 +8,10 @@ import android.media.MediaFormat
 import android.net.Uri
 import android.util.LruCache
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.asCoroutineDispatcher
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -32,6 +35,44 @@ object Waves {
 
     private fun key(uri: String) = MessageDigest.getInstance("MD5").digest(uri.toByteArray()).joinToString("") { "%02x".format(it) }.take(24)
     private fun file(ctx: Context, k: String) = File(File(ctx.filesDir, "waves").apply { mkdirs() }, "$k.w")
+    /** Markierung: Datei nicht auswertbar – nicht bei jedem Durchlauf erneut versuchen */
+    private fun failed(ctx: Context, k: String) = File(File(ctx.filesDir, "waves").apply { mkdirs() }, "$k.x")
+
+    private fun has(ctx: Context, k: String) = file(ctx, k).let { it.exists() && it.length() == N * 4L } || failed(ctx, k).exists()
+
+    private fun write(ctx: Context, k: String, a: FloatArray?) {
+        try {
+            if (a == null) { failed(ctx, k).createNewFile(); return }
+            val bb = ByteBuffer.allocate(N * 4)
+            a.forEach { bb.putFloat(it) }
+            file(ctx, k).writeBytes(bb.array())
+        } catch (_: Exception) { }
+    }
+
+    /** Eigener Hintergrund-Thread mit niedriger Priorität: Wiedergabe und Oberfläche haben immer Vorrang */
+    private val slow = java.util.concurrent.Executors.newSingleThreadExecutor { r ->
+        Thread(r, "waves").apply { priority = Thread.MIN_PRIORITY; isDaemon = true }
+    }.asCoroutineDispatcher()
+    private var job: kotlinx.coroutines.Job? = null
+
+    /**
+     * Ganze Musikbibliothek im Hintergrund vorberechnen (Album für Album), damit die Wellenform beim
+     * Öffnen eines Titels sofort da ist. Bereits berechnete Dateien werden übersprungen.
+     */
+    fun prepareLibrary(ctx: Context) {
+        if (job?.isActive == true) return
+        val app = ctx.applicationContext
+        job = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + slow).launch {
+            val uris = try { Library.dao.urisOf(MUSIC) } catch (_: Exception) { emptyList() }
+            for (u in uris) {
+                ensureActive()
+                val k = key(u)
+                if (has(app, k)) continue
+                lock.withLock { if (!has(app, k)) write(app, k, analyze(app, u)) }
+                delay(30) // dem Gerät zwischendurch Luft lassen
+            }
+        }
+    }
 
     /** Verlauf 0..1 je Abschnitt, null wenn die Datei nicht gelesen werden kann */
     suspend fun of(ctx: Context, uri: String): FloatArray? {
@@ -47,13 +88,8 @@ object Waves {
                         FloatArray(N) { bb.float }
                     } else null
                 } catch (_: Exception) { null }
-                val w = cached ?: analyze(ctx, uri)?.also { a ->
-                    try {
-                        val bb = ByteBuffer.allocate(N * 4)
-                        a.forEach { bb.putFloat(it) }
-                        f.writeBytes(bb.array())
-                    } catch (_: Exception) { }
-                }
+                if (cached == null && failed(ctx, k).exists()) return@withLock null
+                val w = cached ?: analyze(ctx, uri).also { a -> write(ctx, k, a) }
                 w?.also { mem.put(k, it) }
             }
         }

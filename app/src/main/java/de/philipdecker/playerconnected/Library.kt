@@ -170,6 +170,9 @@ abstract class LibDao {
     @Query("SELECT COUNT(*) FROM track WHERE section = :section")
     abstract suspend fun count(section: Int): Int
 
+    @Query("SELECT uri FROM track WHERE section = :section ORDER BY root, dir, name")
+    abstract suspend fun urisOf(section: Int): List<String>
+
     @Query("SELECT * FROM track WHERE uri = :uri LIMIT 1")
     abstract suspend fun byUri(uri: String): Track?
 
@@ -485,6 +488,7 @@ object Library {
             try { withContext(Dispatchers.IO) { scanRoot(ctx, section, tree.toString()) } } finally { scanning.value = false; version.value++ }
         }
         withContext(Dispatchers.IO) { fillDurations(ctx) }
+        Waves.prepareLibrary(ctx)
     }
 
     suspend fun removeRoot(ctx: Context, section: Int, uri: String) {
@@ -525,6 +529,7 @@ object Library {
             } finally { scanning.value = false }
         }
         withContext(Dispatchers.IO) { fillDurations(ctx) }
+        Waves.prepareLibrary(ctx) // Wellenformen der Musik vorab im Hintergrund
     }
 
     /** Dauer der Hörbuch-Dateien nachtragen (für Prozentanzeige), in kleinen Portionen */
