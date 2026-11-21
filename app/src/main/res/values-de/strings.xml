@@ -163,4 +163,6 @@
     <string name="connect_lost">Verbindung zum Lautsprecher verloren – pausiert auf diesem Handy.</string>
     <string name="connect_taken">Der Lautsprecher spielt jetzt etwas anderes.</string>
     <string name="connect_failed">Der Lautsprecher kann diese Datei nicht abspielen.</string>
+    <string name="more_apps">Weitere Apps von SilentApps Minimal Labs</string>
+    <string name="labs_url" translatable="false">https://silentapps-minimal-labs.com/de/</string>
 </resources>

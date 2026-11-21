@@ -164,4 +164,6 @@
     <string name="connect_lost">Connection to the speaker lost – paused on this phone.</string>
     <string name="connect_taken">The speaker is playing something else now.</string>
     <string name="connect_failed">The speaker can\'t play this file.</string>
+    <string name="more_apps">More apps from SilentApps Minimal Labs</string>
+    <string name="labs_url" translatable="false">https://silentapps-minimal-labs.com/</string>
 </resources>

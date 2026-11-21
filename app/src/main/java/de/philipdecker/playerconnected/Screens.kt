@@ -586,6 +586,9 @@ fun SettingsScreen(ui: Actions, prefs: Prefs) {
         Spacer(Modifier.height(6.dp))
         Toggle(stringResource(R.string.licenses), "") { ui.open(Screen.Licenses) }
         T("Minimal Player Connected $appVersion", size = 13.sp, color = Faint, spacing = 1.sp)
+        val labsCtx = androidx.compose.ui.platform.LocalContext.current
+        val labsUrl = stringResource(R.string.labs_url)
+        Option(stringResource(R.string.more_apps)) { openLabs(labsCtx, labsUrl) }
 
         Spacer(Modifier.height(24.dp))
         T(stringResource(R.string.back), size = 15.sp, color = Faint, modifier = Modifier.align(Alignment.CenterHorizontally).tap { ui.back() }.padding(12.dp))
@@ -641,4 +644,11 @@ fun LicensesScreen(ui: Actions) {
         Spacer(Modifier.height(24.dp))
         T(stringResource(R.string.back), size = 15.sp, color = Faint, modifier = Modifier.align(Alignment.CenterHorizontally).tap { ui.back() }.padding(12.dp))
     }
+}
+
+/** „Weitere Apps“: öffnet die Website von SilentApps Minimal Labs im Browser (keine Internet-Berechtigung nötig) */
+fun openLabs(ctx: android.content.Context, url: String = "https://silentapps-minimal-labs.com/de/") {
+    try {
+        ctx.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url)).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
+    } catch (_: Exception) { }
 }
