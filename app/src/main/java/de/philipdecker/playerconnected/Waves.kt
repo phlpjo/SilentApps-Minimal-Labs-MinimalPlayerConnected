@@ -35,14 +35,31 @@ object Waves {
 
     private fun key(uri: String) = MessageDigest.getInstance("MD5").digest(uri.toByteArray()).joinToString("") { "%02x".format(it) }.take(24)
     private fun file(ctx: Context, k: String) = File(File(ctx.filesDir, "waves").apply { mkdirs() }, "$k.w")
-    /** Markierung: Datei nicht auswertbar – nicht bei jedem Durchlauf erneut versuchen */
-    private fun failed(ctx: Context, k: String) = File(File(ctx.filesDir, "waves").apply { mkdirs() }, "$k.x")
+    /** Fehlversuche je Datei; erst nach [MAX_TRIES] gilt sie als nicht auswertbar (ein Fehlschlag kann Zufall sein) */
+    private const val MAX_TRIES = 3
+    private fun failFile(ctx: Context, k: String) = File(File(ctx.filesDir, "waves").apply { mkdirs() }, "$k.x")
+    private fun tries(ctx: Context, k: String): Int = try {
+        failFile(ctx, k).takeIf { it.exists() }?.readText()?.trim()?.toIntOrNull() ?: if (failFile(ctx, k).exists()) MAX_TRIES else 0
+    } catch (_: Exception) { 0 }
+    private fun failed(ctx: Context, k: String) = tries(ctx, k) >= MAX_TRIES
 
-    private fun has(ctx: Context, k: String) = file(ctx, k).let { it.exists() && it.length() == N * 4L } || failed(ctx, k).exists()
+    private fun has(ctx: Context, k: String) = file(ctx, k).let { it.exists() && it.length() == N * 4L } || failed(ctx, k)
+
+    /** Alte Markierungen (früher: ein Fehlschlag = für immer) einmalig löschen */
+    @Volatile private var cleaned = false
+    private fun cleanOld(ctx: Context) {
+        if (cleaned) return
+        cleaned = true
+        val sp = ctx.getSharedPreferences("player", Context.MODE_PRIVATE)
+        if (sp.getInt("wavesFix", 0) >= 1) return
+        try { File(ctx.filesDir, "waves").listFiles { f -> f.name.endsWith(".x") }?.forEach { it.delete() } } catch (_: Exception) { }
+        sp.edit().putInt("wavesFix", 1).apply()
+    }
 
     private fun write(ctx: Context, k: String, a: FloatArray?) {
         try {
-            if (a == null) { failed(ctx, k).createNewFile(); return }
+            if (a == null) { failFile(ctx, k).writeText("${tries(ctx, k) + 1}"); return }
+            failFile(ctx, k).delete()
             val bb = ByteBuffer.allocate(N * 4)
             a.forEach { bb.putFloat(it) }
             file(ctx, k).writeBytes(bb.array())
@@ -64,6 +81,7 @@ object Waves {
         if (job?.isActive == true) return
         val app = ctx.applicationContext
         job = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + slow).launch {
+            cleanOld(app)
             val uris = try { Library.dao.urisOf(MUSIC) } catch (_: Exception) { emptyList() }
             for (u in uris) {
                 ensureActive()
@@ -113,8 +131,9 @@ object Waves {
         mem.get(k)?.let { return it }
         return withContext(Dispatchers.IO) {
             // Schon berechnet → sofort von der Platte, ohne auf die Hintergrund-Berechnung zu warten
+            cleanOld(ctx)
             read(ctx, k)?.let { mem.put(k, it); return@withContext it }
-            if (failed(ctx, k).exists()) return@withContext null
+            if (failed(ctx, k)) return@withContext null
             // Noch nicht berechnet: der angezeigte Titel hat Vorrang – Hintergrundarbeit anhalten
             val wasLibrary = job?.isActive == true
             val wasList = listJob?.isActive == true
@@ -156,7 +175,15 @@ object Waves {
             val dur = if (fmt.containsKey(MediaFormat.KEY_DURATION)) fmt.getLong(MediaFormat.KEY_DURATION) else 0L
             if (dur <= 0) return null
             ex.selectTrack(track)
-            val c = MediaCodec.createDecoderByType(fmt.getString(MediaFormat.KEY_MIME)!!)
+            // Software-Decoder bevorzugen: Hardware-Decoder sind knapp und werden für die Wiedergabe gebraucht
+            val mime = fmt.getString(MediaFormat.KEY_MIME)!!
+            val soft = try {
+                android.media.MediaCodecList(android.media.MediaCodecList.REGULAR_CODECS).codecInfos.firstOrNull { ci ->
+                    !ci.isEncoder && ci.supportedTypes.any { it.equals(mime, ignoreCase = true) } &&
+                        (ci.name.startsWith("c2.android.") || ci.name.startsWith("OMX.google."))
+                }?.name
+            } catch (_: Throwable) { null }
+            val c = try { soft?.let { MediaCodec.createByCodecName(it) } } catch (_: Throwable) { null } ?: MediaCodec.createDecoderByType(mime)
             codec = c
             c.configure(fmt, null, null, 0)
             c.start()
@@ -174,7 +201,7 @@ object Waves {
                 var inputDone = false
                 var guard = 0
                 val until = maxOf(ex.sampleTime, 0L) + WINDOW_US
-                while (guard++ < 400) {
+                while (guard++ < 800) {
                     if (!inputDone) {
                         val ib = c.dequeueInputBuffer(5_000)
                         if (ib >= 0) {
@@ -190,7 +217,7 @@ object Waves {
                             }
                         }
                     }
-                    val ob = c.dequeueOutputBuffer(info, 5_000)
+                    val ob = c.dequeueOutputBuffer(info, 10_000)
                     if (ob == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
                         val of = c.outputFormat
                         floatPcm = of.containsKey(MediaFormat.KEY_PCM_ENCODING) && of.getInteger(MediaFormat.KEY_PCM_ENCODING) == AudioFormat.ENCODING_PCM_FLOAT
@@ -209,7 +236,7 @@ object Waves {
                         }
                         c.releaseOutputBuffer(ob, false)
                         if (info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) break
-                    } else if (inputDone && ob == MediaCodec.INFO_TRY_AGAIN_LATER && guard > 300) break
+                    } else if (inputDone && ob == MediaCodec.INFO_TRY_AGAIN_LATER && guard > 600) break
                 }
                 // Mischung aus Effektivwert und Spitze: wirkt wie die Lautheit, die man hört
                 val rms = if (count > 0) sqrt(sum / count).toFloat() else 0f

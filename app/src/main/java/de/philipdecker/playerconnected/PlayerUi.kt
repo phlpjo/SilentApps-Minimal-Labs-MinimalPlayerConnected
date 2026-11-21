@@ -278,13 +278,16 @@ private fun SeekBar(c: Player, pos: Long, dur: Long, marks: List<Float>, uri: St
     var doneParts by remember(uri) { mutableIntStateOf(0) }
     LaunchedEffect(uri, mode) {
         if (mode == "off") return@LaunchedEffect
-        wave = Waves.of(ctx, uri) { raw, k ->
+        val result = Waves.of(ctx, uri) { raw, k ->
             // Teilstand normieren und Stück für Stück zeigen (wie ein Ladebalken)
             var max = 0f
             for (j in 0 until k) if (raw[j] > max) max = raw[j]
             partial = FloatArray(raw.size) { j -> if (j < k && max > 0f) kotlin.math.sqrt((raw[j] / max).coerceIn(0f, 1f)) else 0f }
             doneParts = k
         }
+        wave = result
+        // Fehlgeschlagen: halbe Form nicht stehen lassen (sah aus wie „lädt ewig“) → schlichte Linie
+        if (result == null) { partial = null; doneParts = 0 }
     }
     var dragFrac by remember { mutableStateOf<Float?>(null) }
     val frac = dragFrac ?: if (dur > 0) (pos.toFloat() / dur).coerceIn(0f, 1f) else 0f
