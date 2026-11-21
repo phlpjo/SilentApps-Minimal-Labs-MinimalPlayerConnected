@@ -86,6 +86,7 @@ class PlaybackService : MediaLibraryService() {
     /** Grundlautstärke (bis 100 %) und Ausblend-Faktor des Schlaf-Timers */
     private var base = 1f
     private var fadeFactor = 1f
+    private var lastItem: MediaItem? = null
     /** ReplayGain des aktuellen Titels in dB (0 = keiner) */
     private var rgDb = 0f
 
@@ -158,6 +159,16 @@ class PlaybackService : MediaLibraryService() {
 
     private val listener = object : Player.Listener {
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+            // Einzelne Hörbuch-Datei bis zum Ende gehört und automatisch weiter → als gehört markieren
+            val prev = lastItem
+            if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO && prev != null) {
+                val ex = prev.mediaMetadata.extras
+                val k = ex?.getString("container")
+                if (ex?.getInt("section", MUSIC) == BOOKS && k != null && k.startsWith("f|")) {
+                    scope.launch { Library.markFinished(k, true); Library.dao.forget(Keys.progressOfFile(prev.mediaId)) }
+                }
+            }
+            lastItem = mediaItem
             rgDb = 0f
             applySpeed()
             applyFx()
@@ -326,11 +337,13 @@ class PlaybackService : MediaLibraryService() {
         val uri = item.mediaId
         val now = System.currentTimeMillis()
         val dur = player.duration
+        // Einzelne Hörbuch-Datei: sie ist das ganze Buch (1/1)
+        val single = key.startsWith("f|")
         // Letzte Datei fast zu Ende (≥ 98 %) → gehört
-        val done = idx == count - 1 && dur != C.TIME_UNSET && dur > 0 && pos >= dur * 0.98
+        val done = (single || idx == count - 1) && dur != C.TIME_UNSET && dur > 0 && pos >= dur * 0.98
         scope.launch(Dispatchers.IO) {
             try {
-                Library.dao.save(Progress(Keys.progressOf(key), uri, pos, idx, count, name, now, finished = done))
+                Library.dao.save(Progress(Keys.progressOf(key), uri, pos, if (single) 0 else idx, if (single) 1 else count, name, now, finished = done))
                 Library.dao.save(Progress(Keys.progressOfFile(uri), uri, pos, idx, count, title, now))
             } catch (_: Exception) { }
         }

@@ -681,6 +681,10 @@ object Library {
         else if (t.dir.isEmpty()) Keys.file(BOOKS, t.root, t.uri)
         else Keys.tree(BOOKS, t.root, t.dir)
 
+    /** Was beim Antippen einer Datei geladen wird: immer die ganze Liste, in der sie steht */
+    fun playKeyFor(section: Int, t: Track): String =
+        if (section == BOOKS && t.dir.isEmpty()) Keys.group(BOOKS, t.root, t.dir) else containerFor(section, t)
+
     /** Container für „Ordner abspielen“ */
     fun containerForFolder(section: Int, root: String, path: String, files: Int): String =
         Keys.tree(section, root, path) // immer mit Unterordnern
@@ -721,6 +725,7 @@ object Library {
             'x' -> listOf(dao.byUri(k.rest) ?: external(k.section, k.rest))
             'l' -> playlistTracks(k.rest.toLongOrNull() ?: -1).map { it.track }
             'q' -> search(k.section, k.rest).filterIsInstance<Entry.File>().map { it.track }
+            'g' -> dao.files(k.root, k.rest).sortedWith(compareBy(Natural) { it.name })
             else -> emptyList()
         }
     }
@@ -958,7 +963,11 @@ object Library {
     /** Anzahl Dateien und Spielzeit eines Ordners (inkl. Unterordner; path "" = ganzer gewählter Ordner) */
     suspend fun stats(root: String, path: String): Stats = withContext(Dispatchers.IO) { dao.stats(root, path) }
 
-    fun item(t: Track, key: String, section: Int, name: String): MediaItem {
+    fun item(t: Track, key0: String, section: Int, name0: String): MediaItem {
+        // In einer Gruppe einzelner Hörbuch-Dateien ist jede Datei ihr eigenes Hörbuch
+        val single = key0.startsWith("g|")
+        val key = if (single) Keys.file(section, t.root, t.uri) else key0
+        val name = if (single) t.title else name0
         val uri = Uri.parse(t.uri)
         val folder = t.dir.substringAfterLast('/').ifEmpty { name }
         return MediaItem.Builder()
@@ -998,6 +1007,10 @@ object Library {
             withContext(Dispatchers.IO) {
                 if (startUri != null) {
                     pos = dao.progress(Keys.progressOfFile(startUri))?.position ?: 0L
+                } else if (key.startsWith("g|")) {
+                    // Liste einzelner Hörbuch-Dateien: bei der zuletzt gehörten weitermachen
+                    val last = tracks.map { it.uri }.chunked(500).flatMap { c -> dao.progressFor(c.map { Keys.progressOfFile(it) }) }.maxByOrNull { it.updated }
+                    if (last != null) { val i = tracks.indexOfFirst { it.uri == last.uri }; if (i >= 0) { index = i; pos = last.position } }
                 } else {
                     dao.progress(Keys.progressOf(key))?.takeIf { !it.finished }?.let { p ->
                         val i = tracks.indexOfFirst { it.uri == p.uri }

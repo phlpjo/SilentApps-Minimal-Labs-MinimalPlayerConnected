@@ -353,7 +353,7 @@ fun EntryList(
                             onLong = { menu = e })
                         is Entry.File -> FileRow(prefs, section, e.track, e.track.uri == current, progress[Keys.progressOfFile(e.track.uri)], fromSearch,
                             onLong = if (section == MUSIC) ({ addTrack = e.track }) else null) {
-                            ui.play(searchKey ?: Library.containerFor(section, e.track), e.track.uri)
+                            ui.play(searchKey ?: Library.playKeyFor(section, e.track), e.track.uri)
                         }
                     }
                 }

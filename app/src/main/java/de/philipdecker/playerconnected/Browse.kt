@@ -96,7 +96,7 @@ object Browse {
         }
         for (e in entries) when (e) {
             is Entry.Folder -> out += folder("b|$section|${e.root}|${e.path}", e.name, ctx.resources.getQuantityString(R.plurals.files_count, e.total, e.total))
-            is Entry.File -> out += playable(playId(Library.containerFor(section, e.track), e.track.uri), Library.label(e.track), e.track.dir.substringAfterLast('/').ifEmpty { null })
+            is Entry.File -> out += playable(playId(Library.playKeyFor(section, e.track), e.track.uri), Library.label(e.track), e.track.dir.substringAfterLast('/').ifEmpty { null })
         }
         return out
     }
@@ -106,7 +106,7 @@ object Browse {
         val out = ArrayList<MediaItem>()
         for (s in listOf(MUSIC, BOOKS)) for (e in Library.search(s, q)) when (e) {
             is Entry.Folder -> out += folder("b|$s|${e.root}|${e.path}", e.name, ctx.getString(if (s == BOOKS) R.string.books else R.string.music))
-            is Entry.File -> out += playable(playId(Library.containerFor(s, e.track), e.track.uri), Library.label(e.track), e.track.dir.substringAfterLast('/').ifEmpty { null })
+            is Entry.File -> out += playable(playId(Library.playKeyFor(s, e.track), e.track.uri), Library.label(e.track), e.track.dir.substringAfterLast('/').ifEmpty { null })
         }
         return out
     }

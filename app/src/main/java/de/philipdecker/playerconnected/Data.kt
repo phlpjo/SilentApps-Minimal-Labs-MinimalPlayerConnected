@@ -72,6 +72,11 @@ object Keys {
     fun file(section: Int, root: String, uri: String) = "f|$section|$root|$uri"
     /** Datei von außen („Öffnen mit“) */
     fun external(section: Int, uri: String) = "x|$section|-|$uri"
+    /**
+     * Hörbuch-Dateien direkt im gewählten Ordner: ganze Liste laden (Weiter = nächste Datei),
+     * aber jede Datei bleibt ihr eigenes Hörbuch (eigene Stelle, eigenes „gehört“).
+     */
+    fun group(section: Int, root: String, dir: String) = "g|$section|$root|$dir"
     /** Suchergebnis als Titelliste (nur Musik) */
     fun search(section: Int, q: String) = "q|$section|-|${q.trim()}"
     /** Playlist (nur Musik) */
