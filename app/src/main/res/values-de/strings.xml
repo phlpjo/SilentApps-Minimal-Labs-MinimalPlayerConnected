@@ -166,4 +166,7 @@
     <string name="more_apps">Weitere Apps von SilentApps Minimal Labs</string>
     <string name="labs_url" translatable="false">https://silentapps-minimal-labs.com/de/</string>
     <string name="feedback">Fehler melden &amp; Vorschläge</string>
+    <string name="pending_hint">Ordner aus %1$s – hier einmal Zugriff erlauben:</string>
+    <string name="pending_allow">Antippen, um Zugriff zu erlauben</string>
+    <string name="sync_note">Ordner und Playlisten bleiben mit %1$s abgeglichen, wenn beide installiert sind.</string>
 </resources>

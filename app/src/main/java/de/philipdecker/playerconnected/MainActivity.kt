@@ -90,7 +90,7 @@ interface Actions {
     fun back()
     fun play(key: String, startUri: String? = null, shuffle: Boolean = false, fromStart: Boolean = false, startPos: Long? = null)
     fun toggle()
-    fun pickFolder(section: Int)
+    fun pickFolder(section: Int, initial: String? = null)
     fun removeFolder(section: Int, uri: String)
     fun rescan()
     fun exportPlaylist(id: Long)
@@ -212,6 +212,7 @@ class MainActivity : ComponentActivity(), Actions {
 
     override fun onStart() {
         super.onStart()
+        Sync.refresh()
         val token = SessionToken(this, ComponentName(this, PlaybackService::class.java))
         val f = MediaController.Builder(this, token).buildAsync()
         future = f
@@ -308,9 +309,16 @@ class MainActivity : ComponentActivity(), Actions {
         c.play()
     }
 
-    override fun pickFolder(section: Int) {
+    override fun pickFolder(section: Int, initial: String?) {
         pickSection = section
-        try { picker.launch(null) } catch (_: Exception) { }
+        // Ordner aus der anderen Player-App: Auswahl gleich dort öffnen
+        val start = initial?.let {
+            try {
+                val tree = android.net.Uri.parse(it)
+                android.provider.DocumentsContract.buildDocumentUriUsingTree(tree, android.provider.DocumentsContract.getTreeDocumentId(tree))
+            } catch (_: Exception) { null }
+        }
+        try { picker.launch(start) } catch (_: Exception) { }
     }
 
     override fun removeFolder(section: Int, uri: String) {

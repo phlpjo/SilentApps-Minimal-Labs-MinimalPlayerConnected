@@ -103,10 +103,22 @@ fun HomeScreen(ui: Actions, prefs: Prefs, now: NowPlaying) {
         Box(Modifier.weight(1f).fillMaxWidth()) { key(section) {
             when {
                 roots.isEmpty() -> Column(Modifier.align(Alignment.CenterStart).floatIn(2)) {
-                    T(stringResource(if (section == MUSIC) R.string.no_folders_music else R.string.no_folders_books), size = 17.sp, color = Dim)
-                    Spacer(Modifier.height(16.dp))
-                    T(stringResource(R.string.choose_folder), size = 26.sp, weight = FontWeight.Light, glow = true,
-                        modifier = Modifier.tap { ui.pickFolder(section) }.padding(vertical = 8.dp))
+                    val pending = prefs.pendingRoots(section)
+                    if (pending.isNotEmpty()) {
+                        // Ordner aus der anderen Player-App: hier nur noch Zugriff erlauben
+                        T(stringResource(R.string.pending_hint, Sync.siblingName(LocalContext.current)), size = 17.sp, color = Dim)
+                        Spacer(Modifier.height(10.dp))
+                        pending.forEach { r ->
+                            T(r.name, size = 26.sp, weight = FontWeight.Light, glow = true, maxLines = 1,
+                                modifier = Modifier.tap { ui.pickFolder(section, r.uri) }.padding(vertical = 6.dp))
+                        }
+                        T(stringResource(R.string.pending_allow), size = 14.sp, color = Faint, maxLines = 1)
+                    } else {
+                        T(stringResource(if (section == MUSIC) R.string.no_folders_music else R.string.no_folders_books), size = 17.sp, color = Dim)
+                        Spacer(Modifier.height(16.dp))
+                        T(stringResource(R.string.choose_folder), size = 26.sp, weight = FontWeight.Light, glow = true,
+                            modifier = Modifier.tap { ui.pickFolder(section) }.padding(vertical = 8.dp))
+                    }
                 }
                 query.isNotBlank() -> SearchResults(ui, prefs, now, section, query, version)
                 else -> {
@@ -551,8 +563,19 @@ fun SettingsScreen(ui: Actions, prefs: Prefs) {
                     T("✕", size = 18.sp, color = Dim, modifier = Modifier.tap { removing = s to r }.padding(start = 14.dp))
                 }
             }
+            // Ordner aus der anderen Player-App ohne Zugriff in dieser App
+            prefs.pendingRoots(s).forEach { r ->
+                Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f).tap { ui.pickFolder(s, r.uri) }) {
+                        T(r.name, size = 18.sp, color = Dim, maxLines = 1)
+                        T(stringResource(R.string.pending_allow), size = 12.sp, color = Faint, maxLines = 1)
+                    }
+                    T("✕", size = 18.sp, color = Dim, modifier = Modifier.tap { prefs.removePending(s, r.uri) }.padding(start = 14.dp))
+                }
+            }
             Option(stringResource(R.string.add_folder), color = Dim) { ui.pickFolder(s) }
         }
+        T(stringResource(R.string.sync_note, Sync.siblingName(LocalContext.current)), size = 12.sp, color = Faint, modifier = Modifier.padding(top = 6.dp))
 
         Section(stringResource(R.string.library))
         Toggle(stringResource(R.string.rescan), if (scanning) "…" else "") { ui.rescan() }

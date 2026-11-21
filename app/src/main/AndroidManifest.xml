@@ -21,6 +21,12 @@
     <!-- Kein Netzwerkstatus-Abruf nötig (auch nicht über Bibliotheken) -->
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" tools:node="remove" />
 
+    <!-- Abgleich mit der anderen Player-App (Minimal Player / Minimal Player Connected) -->
+    <queries>
+        <package android:name="de.philipdecker.player" />
+        <package android:name="de.philipdecker.playerconnected" />
+    </queries>
+
     <application
         android:name=".App"
         android:allowBackup="false"
@@ -62,6 +68,13 @@
                 <data android:mimeType="application/x-flac" />
             </intent-filter>
         </activity>
+
+        <!-- Abgleich von Ordnern und Playlisten mit der anderen Player-App; prüft den Paketnamen des Aufrufers -->
+        <provider
+            android:name=".SyncProvider"
+            android:authorities="${applicationId}.sync"
+            android:exported="true"
+            tools:ignore="ExportedContentProvider" />
 
         <service
             android:name=".PlaybackService"

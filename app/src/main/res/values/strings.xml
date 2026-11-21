@@ -167,4 +167,7 @@
     <string name="more_apps">More apps from SilentApps Minimal Labs</string>
     <string name="labs_url" translatable="false">https://silentapps-minimal-labs.com/</string>
     <string name="feedback">Report a bug &amp; suggestions</string>
+    <string name="pending_hint">Folders from %1$s – allow access here once:</string>
+    <string name="pending_allow">Tap to allow access</string>
+    <string name="sync_note">Folders and playlists stay in sync with %1$s when both are installed.</string>
 </resources>

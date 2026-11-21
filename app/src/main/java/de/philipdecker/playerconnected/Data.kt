@@ -146,6 +146,19 @@ class Prefs private constructor(ctx: Context) {
     }
     fun removeRoot(s: Int, uri: String) { roots[s].value = roots(s).filter { it.uri != uri }; writeRoots(s) }
 
+    /** Ordner aus der anderen Player-App, für die hier noch kein Zugriff erteilt wurde */
+    private val pending = listOf(mutableStateOf(readRoots("pending0")), mutableStateOf(readRoots("pending1")))
+    fun pendingRoots(s: Int): List<Root> = pending[s].value
+    fun setPendingRoots(s: Int, list: List<Root>) {
+        pending[s].value = list
+        val a = JSONArray(); list.forEach { a.put(JSONObject().put("uri", it.uri).put("name", it.name)) }
+        sp.edit().putString("pending$s", a.toString()).apply()
+    }
+    fun removePending(s: Int, uri: String) {
+        if (pendingRoots(s).none { it.uri == uri }) return
+        setPendingRoots(s, pendingRoots(s).filter { it.uri != uri }); Library.version.value++
+    }
+
     /** Zurück-/Vorspringen in Sekunden */
     var back by mutableIntStateOf(sp.getInt("back", 15)); private set
     fun cycleBack() { back = next(listOf(10, 15, 30), back); sp.edit().putInt("back", back).apply() }

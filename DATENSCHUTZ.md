@@ -44,3 +44,7 @@ Philip Decker, detec, Nideggen – Kontakt über https://philipdecker.de
 ## Hinweis für spätere Versionen
 
 Ab Ziel-API 37 (Android 17) verlangt Android für Verbindungen ins lokale Netz die Laufzeit-Berechtigung `ACCESS_LOCAL_NETWORK`. Bei Ziel-API 36 ist sie über `INTERNET` automatisch erteilt. Beim Umstieg auf 37 muss die App vor der ersten Suche danach fragen.
+
+## Abgleich zwischen Minimal Player und Minimal Player Connected
+
+Sind beide Apps installiert, gleichen sie Ordnerliste und Playlisten direkt auf dem Gerät miteinander ab (Android-ContentProvider, nur die jeweils andere App darf abfragen). Es wird nichts ins Netz übertragen. Jede App behält ihren eigenen vollständigen Stand; wird eine deinstalliert, bleibt in der anderen alles erhalten.

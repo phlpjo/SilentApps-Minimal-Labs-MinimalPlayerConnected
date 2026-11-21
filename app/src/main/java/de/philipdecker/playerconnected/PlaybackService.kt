@@ -56,6 +56,7 @@ class App : Application() {
         super.onCreate()
         Prefs.get(this)
         Library.init(this)
+        Sync.start(this) // Ordner und Playlisten mit der anderen Player-App abgleichen
     }
 }
 

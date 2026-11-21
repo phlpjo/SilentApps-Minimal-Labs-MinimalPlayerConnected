@@ -110,6 +110,8 @@ data class Playlist(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val name: String,
     val created: Long,
+    /** Feste Kennung für den Abgleich mit der anderen Player-App */
+    val uid: String = java.util.UUID.randomUUID().toString().replace("-", ""),
 )
 
 /**
@@ -261,6 +263,19 @@ abstract class LibDao {
     @Insert
     abstract suspend fun insertPlaylist(p: Playlist): Long
 
+    @Query("SELECT * FROM playlist")
+    abstract suspend fun allPlaylists(): List<Playlist>
+
+    @Query("SELECT * FROM playlist WHERE uid = :uid LIMIT 1")
+    abstract suspend fun playlistByUid(uid: String): Playlist?
+
+    @Query("DELETE FROM playlist_item WHERE playlistId = :id")
+    abstract suspend fun clearItems(id: Long)
+
+    /** Inhalt einer Playlist komplett ersetzen (Abgleich) */
+    @Transaction
+    open suspend fun replaceItems(id: Long, trackIds: List<Long>) { clearItems(id); addToPlaylist(id, trackIds) }
+
     @Query("UPDATE playlist SET name = :name WHERE id = :id")
     abstract suspend fun renamePlaylist(id: Long, name: String)
 
@@ -330,7 +345,7 @@ abstract class LibDao {
 
 @Database(
     entities = [Track::class, TrackFts::class, Dir::class, Progress::class, Bookmark::class, Playlist::class, PlaylistItem::class],
-    version = 5, exportSchema = false,
+    version = 6, exportSchema = false,
 )
 abstract class LibDb : RoomDatabase() {
     abstract fun dao(): LibDao
@@ -384,6 +399,14 @@ private val MIGRATION_4_5 = object : Migration(4, 5) {
     }
 }
 
+/** Version 5 → 6: feste Kennung je Playlist (Abgleich zwischen den beiden Player-Apps) */
+private val MIGRATION_5_6 = object : Migration(5, 6) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE `playlist` ADD COLUMN `uid` TEXT NOT NULL DEFAULT ''")
+        db.execSQL("UPDATE `playlist` SET `uid` = lower(hex(randomblob(16)))")
+    }
+}
+
 /** Eintrag in einer Ordneransicht */
 sealed interface Entry {
     val id: String
@@ -429,7 +452,7 @@ object Library {
         if (::db.isInitialized) return
         app = ctx.applicationContext
         db = Room.databaseBuilder(app, LibDb::class.java, "library.db")
-            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
             .fallbackToDestructiveMigration(true)
             .build()
     }
@@ -456,6 +479,7 @@ object Library {
         val prefs = Prefs.get(ctx)
         val name = withContext(Dispatchers.IO) { rootName(ctx, tree) }
         prefs.addRoot(section, Root(tree.toString(), name))
+        prefs.removePending(section, tree.toString())
         lock.withLock {
             scanning.value = true
             try { withContext(Dispatchers.IO) { scanRoot(ctx, section, tree.toString()) } } finally { scanning.value = false; version.value++ }
