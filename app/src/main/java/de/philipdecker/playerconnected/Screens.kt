@@ -589,6 +589,7 @@ fun SettingsScreen(ui: Actions, prefs: Prefs) {
         val labsCtx = androidx.compose.ui.platform.LocalContext.current
         val labsUrl = stringResource(R.string.labs_url)
         Option(stringResource(R.string.more_apps)) { openLabs(labsCtx, labsUrl) }
+        Option(stringResource(R.string.feedback)) { mailLabs(labsCtx, "Minimal Player Connected") }
 
         Spacer(Modifier.height(24.dp))
         T(stringResource(R.string.back), size = 15.sp, color = Faint, modifier = Modifier.align(Alignment.CenterHorizontally).tap { ui.back() }.padding(12.dp))
@@ -650,5 +651,15 @@ fun LicensesScreen(ui: Actions) {
 fun openLabs(ctx: android.content.Context, url: String = "https://silentapps-minimal-labs.com/de/") {
     try {
         ctx.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url)).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
+    } catch (_: Exception) { }
+}
+
+/** „Fehler melden & Vorschläge“: öffnet die Mail-App mit Empfänger, Betreff und Geräteinfos */
+fun mailLabs(ctx: android.content.Context, app: String) {
+    val version = try { ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName ?: "" } catch (_: Exception) { "" }
+    val body = "\n\n—\n$app $version · Android ${android.os.Build.VERSION.RELEASE} · ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}"
+    val uri = android.net.Uri.parse("mailto:apps@silentapps-minimal-labs.com?subject=" + android.net.Uri.encode("$app – Feedback") + "&body=" + android.net.Uri.encode(body))
+    try {
+        ctx.startActivity(android.content.Intent(android.content.Intent.ACTION_SENDTO, uri).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
     } catch (_: Exception) { }
 }
