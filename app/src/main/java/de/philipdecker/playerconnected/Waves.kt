@@ -78,8 +78,11 @@ object Waves {
     private var listJob: kotlinx.coroutines.Job? = null
 
     /** Modus „aktuelle Titelliste“: beim Laden einer Liste deren Titel im Hintergrund vorberechnen */
+    private var lastList: List<String>? = null
+
     fun prepareList(ctx: Context, uris: List<String>) {
         if (Prefs.get(ctx).waveMode != "queue") return
+        lastList = uris
         val app = ctx.applicationContext
         listJob?.cancel()
         listJob = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + slow).launch {
@@ -109,21 +112,34 @@ object Waves {
         val k = key(uri)
         mem.get(k)?.let { return it }
         return withContext(Dispatchers.IO) {
-            lock.withLock {
-                mem.get(k)?.let { return@withLock it }
-                val f = file(ctx, k)
-                val cached = try {
-                    if (f.exists() && f.length() == N * 4L) {
-                        val bb = ByteBuffer.wrap(f.readBytes())
-                        FloatArray(N) { bb.float }
-                    } else null
-                } catch (_: Exception) { null }
-                if (cached == null && failed(ctx, k).exists()) return@withLock null
-                val w = cached ?: analyze(ctx, uri, onPartial).also { a -> write(ctx, k, a) }
-                w?.also { mem.put(k, it) }
+            // Schon berechnet → sofort von der Platte, ohne auf die Hintergrund-Berechnung zu warten
+            read(ctx, k)?.let { mem.put(k, it); return@withContext it }
+            if (failed(ctx, k).exists()) return@withContext null
+            // Noch nicht berechnet: der angezeigte Titel hat Vorrang – Hintergrundarbeit anhalten
+            val wasLibrary = job?.isActive == true
+            val wasList = listJob?.isActive == true
+            job?.cancel(); listJob?.cancel()
+            try {
+                lock.withLock {
+                    mem.get(k)?.let { return@withLock it }
+                    val w = read(ctx, k) ?: analyze(ctx, uri, onPartial).also { a -> write(ctx, k, a) }
+                    w?.also { mem.put(k, it) }
+                }
+            } finally {
+                // danach im Hintergrund dort weitermachen
+                if (wasLibrary) { job = null; prepareLibrary(ctx) }
+                if (wasList) lastList?.let { listJob = null; prepareList(ctx, it) }
             }
         }
     }
+
+    private fun read(ctx: Context, k: String): FloatArray? = try {
+        val f = file(ctx, k)
+        if (f.exists() && f.length() == N * 4L) {
+            val bb = ByteBuffer.wrap(f.readBytes())
+            FloatArray(N) { bb.float }
+        } else null
+    } catch (_: Exception) { null }
 
     private suspend fun analyze(ctx: Context, uri: String, onPartial: ((FloatArray, Int) -> Unit)?): FloatArray? {
         val ex = MediaExtractor()
