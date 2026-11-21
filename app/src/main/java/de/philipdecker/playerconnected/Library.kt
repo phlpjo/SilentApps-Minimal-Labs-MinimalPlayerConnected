@@ -683,7 +683,7 @@ object Library {
 
     /** Container für „Ordner abspielen“ */
     fun containerForFolder(section: Int, root: String, path: String, files: Int): String =
-        if (section == MUSIC && files > 0) Keys.dir(MUSIC, root, path) else Keys.tree(section, root, path)
+        Keys.tree(section, root, path) // immer mit Unterordnern
 
     /** Anzeigename eines Containers */
     suspend fun nameOf(key: String, tracks: List<Track>): String {
@@ -691,6 +691,7 @@ object Library {
         return when (k.kind) {
             'f', 'x' -> tracks.firstOrNull()?.title ?: ""
             'l' -> dao.playlist(k.rest.toLongOrNull() ?: -1)?.name ?: ""
+            'q' -> "„${k.rest}“"
             else -> k.rest.substringAfterLast('/').ifEmpty {
                 Prefs.get(app).roots(k.section).firstOrNull { it.uri == k.root }?.name ?: ""
             }
@@ -719,6 +720,7 @@ object Library {
             'f' -> listOfNotNull(dao.byUri(k.rest))
             'x' -> listOf(dao.byUri(k.rest) ?: external(k.section, k.rest))
             'l' -> playlistTracks(k.rest.toLongOrNull() ?: -1).map { it.track }
+            'q' -> search(k.section, k.rest).filterIsInstance<Entry.File>().map { it.track }
             else -> emptyList()
         }
     }
@@ -1004,6 +1006,7 @@ object Library {
                 }
             }
         }
+        Waves.prepareList(app, tracks.map { it.uri }) // nur im Modus „aktuelle Titelliste“
         return Plan(tracks.map { item(it, key, section, name) }, index, pos, section)
     }
 }

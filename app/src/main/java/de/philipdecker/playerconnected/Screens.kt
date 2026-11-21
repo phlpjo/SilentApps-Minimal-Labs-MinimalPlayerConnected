@@ -192,7 +192,20 @@ private fun SearchResults(ui: Actions, prefs: Prefs, now: NowPlaying, section: I
         value = Library.search(section, query)
     }
     results?.let { list ->
-        EntryList(ui, prefs, now, section, list, onClose = null, fromSearch = true, emptyText = stringResource(R.string.nothing_found))
+        val key = if (section == MUSIC) Keys.search(MUSIC, query) else null
+        val hasFiles = list.any { it is Entry.File }
+        EntryList(
+            ui, prefs, now, section, list, onClose = null, fromSearch = true, searchKey = key,
+            header = {
+                if (key != null && hasFiles) item(key = "h:searchplay") {
+                    Row(Modifier.fillMaxWidth().padding(bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                        T(stringResource(R.string.play), size = 18.sp, maxLines = 1, modifier = Modifier.tap { ui.play(key) }.padding(vertical = 10.dp).padding(end = 22.dp))
+                        T(stringResource(R.string.shuffle), size = 18.sp, color = Dim, maxLines = 1, modifier = Modifier.tap { ui.play(key, shuffle = true) }.padding(vertical = 10.dp))
+                    }
+                }
+            },
+            emptyText = stringResource(R.string.nothing_found),
+        )
     }
 }
 
@@ -267,6 +280,8 @@ fun EntryList(
     onClose: (() -> Unit)?,
     header: LazyListScope.() -> Unit = {},
     fromSearch: Boolean = false,
+    /** Suche (Musik): Antippen spielt die ganze Ergebnisliste als Titelliste */
+    searchKey: String? = null,
     emptyText: String,
 ) {
     val list = rememberLazyListState()
@@ -338,7 +353,7 @@ fun EntryList(
                             onLong = { menu = e })
                         is Entry.File -> FileRow(prefs, section, e.track, e.track.uri == current, progress[Keys.progressOfFile(e.track.uri)], fromSearch,
                             onLong = if (section == MUSIC) ({ addTrack = e.track }) else null) {
-                            ui.play(Library.containerFor(section, e.track), e.track.uri)
+                            ui.play(searchKey ?: Library.containerFor(section, e.track), e.track.uri)
                         }
                     }
                 }
@@ -601,6 +616,10 @@ fun SettingsScreen(ui: Actions, prefs: Prefs) {
         Toggle(stringResource(R.string.stars), when (prefs.stars) { "still" -> stringResource(R.string.stars_still); "off" -> off; else -> stringResource(R.string.stars_move) }) { prefs.cycleStars() }
         Toggle(stringResource(R.string.warp), stringResource(warpLabel(prefs.warpLevel))) { prefs.cycleWarp() }
         Toggle(stringResource(R.string.covers), if (prefs.covers) on else off) { prefs.toggleCovers() }
+        Toggle(
+            stringResource(R.string.wave_mode),
+            stringResource(when (prefs.waveMode) { "queue" -> R.string.wave_queue; "track" -> R.string.wave_track; "off" -> R.string.wave_off; else -> R.string.wave_library }),
+        ) { prefs.cycleWaveMode(); Waves.modeChanged(ctx) }
         Toggle(stringResource(R.string.symbols), if (prefs.showIcons) on else off) { prefs.toggleIcons() }
         Toggle(stringResource(R.string.title_display), stringResource(if (prefs.tagTitles) R.string.title_tags else R.string.title_file)) { prefs.toggleTagTitles() }
 

@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -270,11 +271,27 @@ private fun ChapterSheet(chapters: List<Chapter>, current: Int, onPick: (Chapter
 @Composable
 private fun SeekBar(c: Player, pos: Long, dur: Long, marks: List<Float>, uri: String) {
     val ctx = LocalContext.current
-    val wave by produceState<FloatArray?>(null, uri) { value = Waves.of(ctx, uri) }
+    val mode = Prefs.get(ctx).waveMode
+    // Pro Titel neu (remember(uri)): beim Wechsel steht nie die Form des vorigen Titels
+    var wave by remember(uri) { mutableStateOf<FloatArray?>(null) }
+    var partial by remember(uri) { mutableStateOf<FloatArray?>(null) }
+    var doneParts by remember(uri) { mutableIntStateOf(0) }
+    LaunchedEffect(uri, mode) {
+        if (mode == "off") return@LaunchedEffect
+        wave = Waves.of(ctx, uri) { raw, k ->
+            // Teilstand normieren und Stück für Stück zeigen (wie ein Ladebalken)
+            var max = 0f
+            for (j in 0 until k) if (raw[j] > max) max = raw[j]
+            partial = FloatArray(raw.size) { j -> if (j < k && max > 0f) kotlin.math.sqrt((raw[j] / max).coerceIn(0f, 1f)) else 0f }
+            doneParts = k
+        }
+    }
     var dragFrac by remember { mutableStateOf<Float?>(null) }
     val frac = dragFrac ?: if (dur > 0) (pos.toFloat() / dur).coerceIn(0f, 1f) else 0f
     val shown = dragFrac?.let { (it * dur).toLong() } ?: pos
-    val show = androidx.compose.animation.core.animateFloatAsState(if (wave != null) 1f else 0f, androidx.compose.animation.core.tween(500), label = "wave").value
+    val shape = wave ?: partial
+    val ready = wave != null
+    val show = androidx.compose.animation.core.animateFloatAsState(if (shape != null) 1f else 0f, androidx.compose.animation.core.tween(400), label = "wave").value
 
     Column(Modifier.fillMaxWidth().floatIn(3)) {
         Box(
@@ -293,7 +310,7 @@ private fun SeekBar(c: Player, pos: Long, dur: Long, marks: List<Float>, uri: St
                 },
         ) {
             Canvas(Modifier.fillMaxSize()) {
-                val w = wave
+                val w = shape
                 val px = size.width * frac
                 val base = size.height * 0.7f
                 if (w == null || show < 1f) {
@@ -320,8 +337,10 @@ private fun SeekBar(c: Player, pos: Long, dur: Long, marks: List<Float>, uri: St
                         val b = ((i + 1) * w.size / n).coerceAtLeast(a + 1).coerceAtMost(w.size)
                         var v = 0f
                         for (j in a until b) if (w[j] > v) v = w[j]
-                        val h = (0.05f + 0.95f * v) * show
-                        val col = if (x + bar / 2f <= px) done else rest
+                        // noch nicht berechnete Abschnitte: flacher Punkt – die Form baut sich von links auf
+                        val pending = !ready && a >= doneParts
+                        val h = (if (pending) 0.05f else 0.05f + 0.95f * v) * show
+                        val col = if (pending) Line else if (x + bar / 2f <= px) done else rest
                         drawRect(col, Offset(x, base - h * up), androidx.compose.ui.geometry.Size(bar, h * up))
                         drawRect(col.copy(alpha = col.alpha * 0.32f), Offset(x, base + 1.5.dp.toPx()), androidx.compose.ui.geometry.Size(bar, h * down))
                     }

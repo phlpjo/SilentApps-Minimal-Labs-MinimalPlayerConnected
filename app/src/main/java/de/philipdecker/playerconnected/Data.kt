@@ -72,6 +72,8 @@ object Keys {
     fun file(section: Int, root: String, uri: String) = "f|$section|$root|$uri"
     /** Datei von außen („Öffnen mit“) */
     fun external(section: Int, uri: String) = "x|$section|-|$uri"
+    /** Suchergebnis als Titelliste (nur Musik) */
+    fun search(section: Int, q: String) = "q|$section|-|${q.trim()}"
     /** Playlist (nur Musik) */
     fun playlist(id: Long) = "l|$MUSIC|-|$id"
 
@@ -211,6 +213,10 @@ class Prefs private constructor(ctx: Context) {
     /** Cover aus den Metadaten in Listen und im Player */
     var covers by mutableStateOf(sp.getBoolean("covers", true)); private set
     fun toggleCovers() { covers = !covers; sp.edit().putBoolean("covers", covers).apply() }
+
+    /** Wellenform im Player: "library" (ganze Bibliothek vorab) | "queue" (aktuelle Titelliste) | "track" (beim Öffnen) | "off" */
+    var waveMode by mutableStateOf(sp.getString("waveMode", "library") ?: "library"); private set
+    fun cycleWaveMode() { waveMode = next(listOf("library", "queue", "track", "off"), waveMode); sp.edit().putString("waveMode", waveMode).apply() }
 
     var showIcons by mutableStateOf(sp.getBoolean("showIcons", false)); private set
     fun toggleIcons() { showIcons = !showIcons; sp.edit().putBoolean("showIcons", showIcons).apply() }

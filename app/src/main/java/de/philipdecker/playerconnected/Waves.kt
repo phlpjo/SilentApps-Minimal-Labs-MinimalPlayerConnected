@@ -60,6 +60,7 @@ object Waves {
      * Öffnen eines Titels sofort da ist. Bereits berechnete Dateien werden übersprungen.
      */
     fun prepareLibrary(ctx: Context) {
+        if (Prefs.get(ctx).waveMode != "library") return
         if (job?.isActive == true) return
         val app = ctx.applicationContext
         job = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + slow).launch {
@@ -68,14 +69,43 @@ object Waves {
                 ensureActive()
                 val k = key(u)
                 if (has(app, k)) continue
-                lock.withLock { if (!has(app, k)) write(app, k, analyze(app, u)) }
+                lock.withLock { if (!has(app, k)) write(app, k, analyze(app, u, null)) }
                 delay(30) // dem Gerät zwischendurch Luft lassen
             }
         }
     }
 
-    /** Verlauf 0..1 je Abschnitt, null wenn die Datei nicht gelesen werden kann */
-    suspend fun of(ctx: Context, uri: String): FloatArray? {
+    private var listJob: kotlinx.coroutines.Job? = null
+
+    /** Modus „aktuelle Titelliste“: beim Laden einer Liste deren Titel im Hintergrund vorberechnen */
+    fun prepareList(ctx: Context, uris: List<String>) {
+        if (Prefs.get(ctx).waveMode != "queue") return
+        val app = ctx.applicationContext
+        listJob?.cancel()
+        listJob = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + slow).launch {
+            for (u in uris.take(500)) {
+                ensureActive()
+                val k = key(u)
+                if (has(app, k)) continue
+                lock.withLock { if (!has(app, k)) write(app, k, analyze(app, u, null)) }
+                delay(30)
+            }
+        }
+    }
+
+    /** Einstellung geändert: Hintergrundarbeit passend starten oder anhalten */
+    fun modeChanged(ctx: Context) {
+        when (Prefs.get(ctx).waveMode) {
+            "library" -> { listJob?.cancel(); prepareLibrary(ctx) }
+            else -> { job?.cancel(); job = null; if (Prefs.get(ctx).waveMode != "queue") listJob?.cancel() }
+        }
+    }
+
+    /**
+     * Verlauf 0..1 je Abschnitt, null wenn die Datei nicht gelesen werden kann.
+     * onPartial meldet während der Berechnung den bisherigen Stand (Rohwerte, Anzahl fertiger Abschnitte).
+     */
+    suspend fun of(ctx: Context, uri: String, onPartial: ((FloatArray, Int) -> Unit)? = null): FloatArray? {
         val k = key(uri)
         mem.get(k)?.let { return it }
         return withContext(Dispatchers.IO) {
@@ -89,13 +119,13 @@ object Waves {
                     } else null
                 } catch (_: Exception) { null }
                 if (cached == null && failed(ctx, k).exists()) return@withLock null
-                val w = cached ?: analyze(ctx, uri).also { a -> write(ctx, k, a) }
+                val w = cached ?: analyze(ctx, uri, onPartial).also { a -> write(ctx, k, a) }
                 w?.also { mem.put(k, it) }
             }
         }
     }
 
-    private suspend fun analyze(ctx: Context, uri: String): FloatArray? {
+    private suspend fun analyze(ctx: Context, uri: String, onPartial: ((FloatArray, Int) -> Unit)?): FloatArray? {
         val ex = MediaExtractor()
         var codec: MediaCodec? = null
         try {
@@ -168,6 +198,7 @@ object Waves {
                 // Mischung aus Effektivwert und Spitze: wirkt wie die Lautheit, die man hört
                 val rms = if (count > 0) sqrt(sum / count).toFloat() else 0f
                 out[i] = rms * 0.7f + peak * 0.3f
+                onPartial?.invoke(out, i + 1)
             }
             val max = out.maxOrNull() ?: 0f
             if (max <= 0.0001f) return null

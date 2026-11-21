@@ -170,4 +170,9 @@
     <string name="pending_hint">Folders from %1$s – allow access here once:</string>
     <string name="pending_allow">Tap to allow access</string>
     <string name="sync_note">Folders and playlists stay in sync with %1$s when both are installed.</string>
+    <string name="wave_mode">Waveform</string>
+    <string name="wave_library">whole library</string>
+    <string name="wave_queue">current list</string>
+    <string name="wave_track">when opened</string>
+    <string name="wave_off">off</string>
 </resources>
