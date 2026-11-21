@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="26 18 64 64" width="512" height="512">
+  <title>Minimal Player Connected</title>
+  <!-- Linienfarbe folgt der Textfarbe (currentColor): auf hellem Grund schwarz, auf dunklem weiß -->
+  <g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="54" cy="54" r="18" stroke-width="4"/>
+    <path d="M50,47.5 L50,60.5 L61,54 Z" stroke-width="3"/>
+    <path d="M64.14,32.25 A24,24 0 0,1 75.75,43.86" stroke-width="3"/>
+    <path d="M66.68,26.81 A30,30 0 0,1 81.19,41.32" stroke-width="3"/>
+  </g>
+</svg>
