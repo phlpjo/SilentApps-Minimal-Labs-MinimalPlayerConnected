@@ -4,6 +4,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -168,7 +170,7 @@ fun PairScreen(ui: Actions) {
     val st by Pc.state.collectAsState()
     androidx.compose.runtime.LaunchedEffect(st.paired) { if (st.paired) ui.back() }
     Column(
-        Modifier.fillMaxSize().windowInsetsPadding(androidx.compose.foundation.layout.WindowInsets.systemBars).padding(horizontal = 32.dp, vertical = 24.dp),
+        Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.systemBars).padding(horizontal = 32.dp, vertical = 24.dp),
     ) {
         T(stringResource(R.string.pc_connect), size = 30.sp, weight = FontWeight.Light, glow = true, modifier = Modifier.floatIn(0))
         Box(Modifier.weight(1f)) { PcPairing() }
