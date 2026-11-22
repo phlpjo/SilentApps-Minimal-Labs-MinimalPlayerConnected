@@ -1100,7 +1100,8 @@ object Library {
         val single = key0.startsWith("g|")
         val key = if (single) Keys.file(section, t.root, t.uri) else key0
         val name = if (single) t.title else name0
-        val uri = Uri.parse(t.uri)
+        // Titel vom Computer: gleich die echte Adresse (Offline-Kopie oder Stream)
+        val uri = Pc.realUri(Uri.parse(t.uri))
         val folder = t.dir.substringAfterLast('/').ifEmpty { name }
         return MediaItem.Builder()
             .setMediaId(t.uri)

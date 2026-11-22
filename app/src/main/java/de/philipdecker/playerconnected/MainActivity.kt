@@ -158,6 +158,11 @@ class MainActivity : ComponentActivity(), Actions {
 
     private val listener = object : Player.Listener {
         override fun onEvents(player: Player, events: Player.Events) = now.update(player)
+        /** Wiedergabe-Fehler sichtbar machen (statt still zu verschwinden) */
+        override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+            val name = now.item?.mediaMetadata?.title ?: ""
+            android.widget.Toast.makeText(this@MainActivity, "$name: ${error.errorCodeName}" + (error.cause?.message?.let { " – $it" } ?: ""), android.widget.Toast.LENGTH_LONG).show()
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {

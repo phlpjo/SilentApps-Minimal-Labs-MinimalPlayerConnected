@@ -95,12 +95,7 @@ class PlaybackService : MediaLibraryService() {
         prefs = Prefs.get(this)
         Library.init(this)
         Pc.init(this)
-        // Titel vom Computer (mlpc://…): beim Öffnen auf Offline-Kopie oder Stream umleiten
-        val sources = androidx.media3.exoplayer.source.DefaultMediaSourceFactory(
-            androidx.media3.datasource.ResolvingDataSource.Factory(androidx.media3.datasource.DefaultDataSource.Factory(this)) { Pc.resolve(it) },
-        )
         exo = ExoPlayer.Builder(this)
-            .setMediaSourceFactory(sources)
             .setAudioAttributes(
                 AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MUSIC).build(),
                 /* handleAudioFocus = */ true,
@@ -661,7 +656,8 @@ class PlaybackService : MediaLibraryService() {
         ): ListenableFuture<MutableList<MediaItem>> = future {
             mediaItems.flatMap { mi ->
                 if (mi.mediaId.startsWith("p|")) resolve(mi.mediaId)?.mediaItems ?: emptyList()
-                else listOf(mi.buildUpon().setUri(mi.requestMetadata.mediaUri ?: Uri.parse(mi.mediaId)).build())
+                // Titel vom Computer (mlpc://…): Offline-Kopie oder Stream
+                else listOf(mi.buildUpon().setUri(Pc.realUri(mi.requestMetadata.mediaUri ?: Uri.parse(mi.mediaId))).build())
             }.toMutableList()
         }
 
