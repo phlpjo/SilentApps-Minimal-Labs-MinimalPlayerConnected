@@ -175,26 +175,10 @@
     <string name="wave_queue">current list</string>
     <string name="wave_track">when opened</string>
     <string name="wave_off">off</string>
-    <string name="receive_section">Minimal Library</string>
-    <string name="receive_entry">Receive from Minimal Library</string>
-    <string name="receive_title">Receive</string>
-    <string name="receive_folder">Receive folder</string>
-    <string name="receive_pick">Choose folder</string>
-    <string name="receive_change">Choose another folder</string>
-    <string name="receive_need_folder">Choose where the music from your computer should go. The folder is added to your music folders automatically.</string>
-    <string name="receive_code">Pairing code</string>
-    <string name="receive_how">On your computer: Minimal Library → Sync → + Add target → Phone over Wi-Fi. Phone and computer must be on the same Wi-Fi. Keep the app open while receiving.</string>
-    <string name="receive_ready">Ready to receive</string>
-    <string name="receive_from">From %s</string>
-    <string name="receive_progress">Receiving %1$d of %2$d</string>
-    <string name="receive_done">Done – library and playlists updated</string>
-    <string name="receive_paired">Paired computers: %d</string>
-    <string name="receive_forget">Unpair all computers</string>
     <string name="pc_tab">PC</string>
     <string name="pc_code_wrong">Wrong code</string>
     <string name="pc_unpaired">This phone is no longer paired – please pair again</string>
     <string name="pc_errors_fmt">%d errors</string>
-    <string name="pc_need_folder">Choose a receive folder first (Settings → Receive from Minimal Library)</string>
     <string name="pc_loading">Loading library …</string>
     <string name="pc_syncing">updating …</string>
     <string name="pc_online">connected</string>
@@ -224,4 +208,5 @@
     <string name="export_none">Choose at least one playlist</string>
     <string name="export_hint">Plug in the USB stick (USB-C or adapter) and choose it in the next step. Tracks from the PC are copied over Wi-Fi.</string>
     <string name="pc_offline_mark">offline</string>
+    <string name="pc_upload_fmt">To PC: %1$d of %2$d</string>
 </resources>

@@ -120,14 +120,14 @@ fun PcFolderOptions(f: Entry.Folder, onDone: () -> Unit) {
     Option(stringResource(if (pinned) R.string.pc_offline_off else R.string.pc_offline_on)) { Pc.setPinned(key, !pinned); onDone() }
 }
 
-/** Ganz oben, in jedem Bildschirm: Empfang, Offline-Download, Export */
+/** Ganz oben, in jedem Bildschirm: Offline-Download, Hochladen zum PC, Export */
 @Composable
 fun TransferLine(modifier: Modifier = Modifier) {
-    val r by Receive.status.collectAsState()
+    val u by Pc.upload.collectAsState()
     val o by Pc.offline.collectAsState()
     val e by Library.export.collectAsState()
     val text = when {
-        r.running && r.total > 0 && !r.finished -> stringResource(R.string.receive_progress, r.done.coerceAtMost(r.total), r.total)
+        u != null && u?.finished == false -> stringResource(R.string.pc_upload_fmt, u!!.done, u!!.total)
         o != null && o?.finished == false -> stringResource(R.string.pc_offline_progress_fmt, o!!.done, o!!.total)
         e != null && e?.finished == false -> stringResource(R.string.export_progress_fmt, e!!.done, e!!.total)
         else -> null

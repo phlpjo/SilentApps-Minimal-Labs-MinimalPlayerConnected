@@ -494,45 +494,6 @@ object Library {
         Waves.prepareLibrary(ctx)
     }
 
-    // ───────── Empfang von Minimal Library (WLAN) ─────────
-
-    data class ReceivedPlaylist(val uid: String, val name: String, val files: List<String>)
-    data class Received(val prefix: String, val playlists: List<ReceivedPlaylist>)
-
-    /**
-     * Nach einem Sync aus Minimal Library: Empfangsordner (als Musikordner) neu einlesen und die mitgeschickten
-     * Playlisten anlegen bzw. aktualisieren. Playlisten dieses Computers, die er nicht mehr schickt, verschwinden.
-     */
-    suspend fun receiveDone(ctx: Context, rootUri: String, rec: Received) {
-        val prefs = Prefs.get(ctx)
-        if (prefs.roots(MUSIC).none { it.uri == rootUri }) {
-            addRoot(ctx, MUSIC, Uri.parse(rootUri))
-        } else {
-            lock.withLock {
-                scanning.value = true
-                try { withContext(Dispatchers.IO) { scanRoot(ctx, MUSIC, rootUri) } } finally { scanning.value = false; version.value++ }
-            }
-            withContext(Dispatchers.IO) { fillDurations(ctx) }
-            Waves.prepareLibrary(ctx)
-        }
-        withContext(Dispatchers.IO) {
-            val byRel = dao.tracksOfRoot(rootUri).associateBy { (if (it.dir.isEmpty()) it.name else "${it.dir}/${it.name}").lowercase() }
-            val keep = HashSet<String>()
-            for (p in rec.playlists) {
-                keep += p.uid
-                val ids = p.files.mapNotNull { byRel[it.lowercase()]?.id }
-                val existing = dao.playlistByUid(p.uid)
-                val id = existing?.id ?: dao.insertPlaylist(Playlist(name = p.name, created = System.currentTimeMillis(), uid = p.uid))
-                if (existing != null && existing.name != p.name) dao.renamePlaylist(id, p.name)
-                dao.replaceItems(id, ids)
-            }
-            if (rec.prefix.isNotEmpty()) {
-                dao.allPlaylists().filter { it.uid.startsWith(rec.prefix) && it.uid !in keep }.forEach { dao.deletePlaylist(it.id) }
-            }
-        }
-        version.value++
-    }
-
     suspend fun removeRoot(ctx: Context, section: Int, uri: String) {
         val prefs = Prefs.get(ctx)
         prefs.removeRoot(section, uri)
@@ -1030,16 +991,16 @@ object Library {
         var failed = 0
         for ((rel, t) in files) {
             try {
-                val have = Receive.sizeOf(ctx, target, rel)
+                val have = Saf.sizeOf(ctx, target, rel)
                 if (have == null || (t.size > 0 && have != t.size)) {
-                    (Pc.open(ctx, t) ?: throw IllegalStateException("nicht lesbar")).use { Receive.saveFile(ctx, target, rel, it) }
+                    (Pc.open(ctx, t) ?: throw IllegalStateException("nicht lesbar")).use { Saf.saveFile(ctx, target, rel, it) }
                 }
             } catch (_: Exception) { failed++ }
             done++
             export.value = Export(done, files.size)
         }
         for ((rel, text) in m3us) {
-            try { Receive.saveFile(ctx, target, rel, text.toByteArray(Charsets.UTF_8).inputStream()) } catch (_: Exception) { failed++ }
+            try { Saf.saveFile(ctx, target, rel, text.toByteArray(Charsets.UTF_8).inputStream()) } catch (_: Exception) { failed++ }
         }
         export.value = Export(done, files.size, finished = true, failed = failed > 0)
     }

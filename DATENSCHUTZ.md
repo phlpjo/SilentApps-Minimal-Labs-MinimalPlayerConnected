@@ -19,7 +19,7 @@ Die App verbindet sich ausschließlich mit Geräten in deinem eigenen WLAN, nie 
 
 - **Suche:** Öffnest du „Wiedergabe auf“, schickt die App eine UPnP-Suchanfrage (SSDP) ins lokale Netz. Lautsprecher antworten mit ihrer Adresse; die App liest deren Gerätebeschreibung (Name, Modell). Nichts davon wird gespeichert.
 - **Abspielen:** Wählst du einen Lautsprecher, startet die App einen kleinen Server im Handy. Der Lautsprecher bekommt eine zufällige, nicht erratbare Adresse für den gerade gespielten Titel (und ggf. das Cover) und holt die Datei dort ab. Es gibt kein Verzeichnis, keine Liste deiner Dateien. Der Server läuft nur, solange ein Lautsprecher verbunden ist.
-- **Empfangen von Minimal Library:** Nur solange der Bildschirm „Von Minimal Library empfangen“ offen ist, antwortet die App im WLAN auf die Suche von Minimal Library (Name des Handys, freier Speicher) und nimmt Dateien an. Schreiben darf nur ein Computer, der einmal mit dem angezeigten 6-stelligen Code gekoppelt wurde, und nur in den Empfangsordner, den du selbst gewählt hast. Gekoppelte Computer lassen sich dort jederzeit entkoppeln.
+- **Minimal Library (dein Computer):** Im Bereich „PC“ sucht die App Minimal Library im WLAN und verbindet sich nach einmaligem Koppeln (6-stelliger Code) direkt mit deinem Computer – nie mit einem Server im Internet. Sie lädt Titelliste und Playlisten, spielt Titel von dort ab, speichert auf Wunsch Kopien im eigenen App-Speicher („offline verfügbar“) und überträgt Musik aus deinen Handy-Ordnern, die auf dem Computer noch fehlt, sowie deine Playlisten dorthin. Entkoppeln jederzeit in den Einstellungen.
 - **Steuerung:** Play, Pause, Spulen, Lautstärke gehen per UPnP direkt an den Lautsprecher.
 - Was der Lautsprecher bzw. dessen Hersteller mit den abgespielten Titeln macht (z. B. Verlauf in dessen App), liegt außerhalb dieser App.
 
@@ -27,7 +27,7 @@ Die App verbindet sich ausschließlich mit Geräten in deinem eigenen WLAN, nie 
 
 | Berechtigung | Wofür | Nachfrage? |
 |---|---|---|
-| Ordnerzugriff (Android-Speicherzugriff, von dir gewählt) | Nur die Ordner lesen, die du selbst auswählst; in den Empfangsordner für Minimal Library auch schreiben. Kein Zugriff auf andere Dateien. | Du wählst jeden Ordner selbst |
+| Ordnerzugriff (Android-Speicherzugriff, von dir gewählt) | Nur die Ordner lesen, die du selbst auswählst; beim Export auf einen USB-Stick in den dort gewählten Ordner schreiben. Kein Zugriff auf andere Dateien. | Du wählst jeden Ordner selbst |
 | `INTERNET` | Verbindung zu Lautsprechern im eigenen WLAN (Android verlangt diese Berechtigung auch für reine Heimnetz-Verbindungen). Keine Verbindung ins Internet. | nein (automatisch) |
 | `CHANGE_WIFI_MULTICAST_STATE` | Lautsprecher im WLAN finden (Suchanfrage per Multicast), nur während der Suche | nein (automatisch) |
 | `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_MEDIA_PLAYBACK` | Wiedergabe läuft weiter, wenn die App im Hintergrund oder der Bildschirm aus ist; Steuerung auf Sperrbildschirm und per Kopfhörer | nein (automatisch) |

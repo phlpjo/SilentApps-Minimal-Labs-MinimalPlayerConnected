@@ -50,7 +50,6 @@ sealed interface Screen {
     data object Player : Screen
     data object Settings : Screen
     data object Licenses : Screen
-    data object Receive : Screen
     data class Export(val preselect: Long?) : Screen
     data object Playlists : Screen
     data class Playlist(val id: Long, val name: String) : Screen
@@ -100,7 +99,6 @@ interface Actions {
     fun removeFolder(section: Int, uri: String)
     fun rescan()
     fun exportPlaylist(id: Long)
-    fun pickReceiveFolder()
     /** Playlisten auf einen Stick: Ziel wählen lassen, dann exportieren */
     fun exportTo(ids: List<Long>, layout: String)
 }
@@ -133,20 +131,6 @@ class MainActivity : ComponentActivity(), Actions {
         }
     }
 
-    /** Empfangsordner für Minimal Library: Lese- und Schreibrecht dauerhaft, gleich als Musikordner einlesen */
-    private val receivePicker = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
-        if (uri != null) {
-            try {
-                contentResolver.takePersistableUriPermission(uri, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
-            } catch (_: Exception) { }
-            Receive.setFolder(this, uri.toString())
-            scope.launch { Library.addRoot(this@MainActivity, MUSIC, uri) }
-        }
-    }
-
-    override fun pickReceiveFolder() {
-        try { receivePicker.launch(null) } catch (_: Exception) { }
-    }
 
     override fun exportPlaylist(id: Long) = open(Screen.Export(id))
 
@@ -210,14 +194,13 @@ class MainActivity : ComponentActivity(), Actions {
                                 Screen.Player -> PlayerScreen(this@MainActivity, prefs, now)
                                 Screen.Settings -> SettingsScreen(this@MainActivity, prefs)
                                 Screen.Licenses -> LicensesScreen(this@MainActivity)
-                                Screen.Receive -> ReceiveScreen(this@MainActivity)
                                 is Screen.Export -> ExportScreen(this@MainActivity, s)
                                 Screen.Playlists -> PlaylistsScreen(this@MainActivity, now)
                                 is Screen.Playlist -> PlaylistScreen(this@MainActivity, prefs, now, s)
                             }
                         }
                     }
-                    // Fortschritt (Empfang, Offline, Export) in jedem Bildschirm
+                    // Fortschritt (Offline, Hochladen, Export) in jedem Bildschirm
                     TransferLine(Modifier.align(Alignment.TopCenter).windowInsetsPadding(WindowInsets.statusBars))
                 }
             }
@@ -229,7 +212,6 @@ class MainActivity : ComponentActivity(), Actions {
         is Screen.Folder -> 1 + s.path.count { it == '/' } + (if (s.path.isEmpty()) 0 else 1)
         Screen.Settings -> 50
         Screen.Licenses -> 51
-        Screen.Receive -> 52
         is Screen.Export -> 12
         Screen.Playlists -> 10
         is Screen.Playlist -> 11
@@ -254,8 +236,7 @@ class MainActivity : ComponentActivity(), Actions {
     override fun onStart() {
         super.onStart()
         Sync.refresh()
-        // Solange die App offen ist (jeder Bildschirm): Empfang von Minimal Library und Verbindung zum PC
-        Receive.start(this)
+        // Solange die App offen ist (jeder Bildschirm): Verbindung zu Minimal Library
         Pc.start(this)
         val token = SessionToken(this, ComponentName(this, PlaybackService::class.java))
         val f = MediaController.Builder(this, token).buildAsync()
@@ -273,7 +254,6 @@ class MainActivity : ComponentActivity(), Actions {
 
     override fun onStop() {
         super.onStop()
-        Receive.stop()
         Pc.stop()
         ctrl?.removeListener(listener)
         future?.let { MediaController.releaseFuture(it) }

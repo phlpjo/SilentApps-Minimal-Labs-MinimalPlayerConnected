@@ -3,7 +3,6 @@ package de.philipdecker.playerconnected
 import android.content.Context
 import android.net.Uri
 import android.net.wifi.WifiManager
-import android.provider.DocumentsContract
 import androidx.media3.datasource.DataSpec
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -29,7 +28,8 @@ import java.net.URL
 /**
  * Bibliothek am Computer (Minimal Library): solange sie läuft, sieht die App alle Ordner und Playlisten 1:1,
  * spielt direkt ab (Streaming im Heimnetz), bearbeitet Playlisten und macht Ordner
- * oder Playlisten offline verfügbar (echte Dateien im Empfangsordner – erscheinen dann auch unter „Musik“).
+ * oder Playlisten offline verfügbar (Dateien im eigenen Speicher der App, nur im Bereich PC). Musik aus den
+ * Handy-Ordnern, die am PC fehlt, wird bei Verbindung hochgeladen; eigene Playlisten gehen mit.
  *
  * Titel vom PC stehen in der normalen Datenbank (Bereich Musik) unter eigenen Wurzeln „pc:<PC>:<Nr>“ mit
  * Adressen „mlpc://<PC>/<Titel-ID>.<Endung>“. Erst beim Abspielen wird daraus die echte Adresse
@@ -152,7 +152,7 @@ object Pc {
     /** Mit dem Code aus Minimal Library (Einstellungen) koppeln. null = ok, sonst Fehlertext */
     suspend fun pair(f: Found, code: String): String? = withContext(Dispatchers.IO) {
         try {
-            val (st, body) = request("POST", "http://${f.addr}/pair", code.filter { it.isDigit() }, headers = mapOf("X-Client" to Receive.deviceName(app)))
+            val (st, body) = request("POST", "http://${f.addr}/pair", code.filter { it.isDigit() }, headers = mapOf("X-Client" to Saf.deviceName(app)))
             if (st == 403) return@withContext app.getString(R.string.pc_code_wrong)
             if (st != 200) return@withContext "$st"
             val o = JSONObject(body)
@@ -193,6 +193,7 @@ object Pc {
                             val v = JSONObject(body).optString("version")
                             state.value = state.value.copy(online = true, error = null)
                             if (v != sp().getString("version", null)) refresh()
+                            syncUp() // selbst gedrosselt (alle 5 Minuten)
                             true
                         } else false
                     } catch (_: Exception) { false }
@@ -304,7 +305,7 @@ object Pc {
                 state.value = state.value.copy(name = o.optString("name", state.value.name), loaded = true, online = true, error = null)
                 Library.version.value++
                 scope.launch { fetchCovers() }
-                scope.launch { syncOffline() }
+                scope.launch { syncOffline(); syncUp() }
             } catch (e: Exception) {
                 state.value = state.value.copy(error = e.message)
             } finally {
@@ -422,19 +423,14 @@ object Pc {
         scope.launch { syncOffline() }
     }
 
+    /** Offline-Kopien liegen im eigenen Speicher der App (nur Bereich PC; weg bei Deinstallation) */
+    private fun offlineDir() = File(app.getExternalFilesDir(null) ?: app.filesDir, "offline").apply { mkdirs() }
+
     /** Ausgewählte Ordner/Playlisten herunterladen, nicht mehr benötigte Kopien löschen */
     suspend fun syncOffline() = offlineLock.withLock {
-        val tree = Receive.folder(app)?.let { Uri.parse(it) }
         val pinned = pins()
         if (pinned.isEmpty() && local.isEmpty()) return@withLock
-        if (tree == null) {
-            if (pinned.isNotEmpty()) offline.value = OfflineStatus(0, 0, null, true, app.getString(R.string.pc_need_folder))
-            return@withLock
-        }
-        val names = roots().associate { it.uri to it.name }
-        // gewünschte Titel
         val want = LinkedHashMap<Long, Track>()
-        val lists = ArrayList<Library.ReceivedPlaylist>()
         for (k in pinned) {
             when {
                 k.startsWith("d|") -> {
@@ -443,18 +439,17 @@ object Pc {
                     Library.dao.subtree(root, path).forEach { t -> trackIdOf(t.uri)?.let { want[it] = t } }
                 }
                 k.startsWith("l|") -> {
-                    val uid = k.removePrefix("l|")
-                    val p = Library.dao.playlistByUid(uid) ?: continue
-                    val tr = Library.playlistTracks(p.id).map { it.track }
-                    tr.forEach { t -> trackIdOf(t.uri)?.let { want[it] = t } }
-                    lists += Library.ReceivedPlaylist("off-$uid", p.name, tr.map { relFor(it, names) })
+                    val p = Library.dao.playlistByUid(k.removePrefix("l|")) ?: continue
+                    Library.playlistTracks(p.id).forEach { pt -> trackIdOf(pt.track.uri)?.let { want[it] = pt.track } }
                 }
             }
         }
-        val todo = want.filter { (tid, _) -> !local.containsKey(tid) || !exists(Uri.parse(local[tid])) }
+        // Bibliothek noch nicht geladen → nichts löschen
+        if (want.isEmpty() && pinned.isNotEmpty() && !state.value.loaded) return@withLock
+        val dir = offlineDir()
+        val todo = want.filter { (tid, _) -> local[tid]?.let { File(Uri.parse(it).path ?: "").exists() } != true }
         var done = 0
         var failed = 0
-        var changed = false
         offline.value = OfflineStatus(0, todo.size, null, todo.isEmpty())
         for ((tid, t) in todo) {
             val url = httpUrl(t.uri)
@@ -465,43 +460,125 @@ object Pc {
                 c.connectTimeout = 5000; c.readTimeout = 60_000
                 try {
                     if (c.responseCode != 200) throw IllegalStateException("${c.responseCode}")
-                    val doc = c.inputStream.use { Receive.saveFile(app, tree, relFor(t, names), it) }
-                    local[tid] = doc
-                    changed = true
+                    val f = File(dir, tid.toString() + "." + t.uri.substringAfterLast('.', "mp3"))
+                    val tmp = File(dir, f.name + ".part")
+                    c.inputStream.use { inp -> tmp.outputStream().use { inp.copyTo(it, 256 * 1024) } }
+                    if (!tmp.renameTo(f)) throw IllegalStateException("speichern")
+                    local[tid] = Uri.fromFile(f).toString()
                 } finally { c.disconnect() }
             } catch (_: Exception) { failed++ }
             done++
             if (done % 10 == 0) saveOffline()
         }
-        // nicht mehr gewünschte Kopien entfernen
-        val drop = local.keys.filter { it !in want.keys }
-        for (tid in drop) {
-            local.remove(tid)?.let { u -> try { DocumentsContract.deleteDocument(app.contentResolver, Uri.parse(u)) } catch (_: Exception) { } }
-            changed = true
+        // nicht mehr gewünschte Kopien löschen
+        for (tid in local.keys.filter { it !in want.keys }) {
+            local.remove(tid)?.let { u -> try { File(Uri.parse(u).path ?: "").delete() } catch (_: Exception) { } }
         }
-        if (drop.isNotEmpty()) Receive.removeEmptyDirs(app, tree, "PC")
         saveOffline()
-        if (changed || lists.isNotEmpty()) {
-            try { Library.receiveDone(app, tree.toString(), Library.Received("off-pc-", lists)) } catch (_: Exception) { }
-        }
+        Library.version.value++
         offline.value = OfflineStatus(done, todo.size, null, true, if (failed > 0) app.getString(R.string.pc_errors_fmt, failed) else null)
     }
 
-    /** Ablage der Offline-Kopie im Empfangsordner: „PC/<Musikordner>/<Unterordner>/<Datei>“ */
-    private fun relFor(t: Track, names: Map<String, String>): String {
-        val root = (names[t.root] ?: "Musik").replace(Regex("[\\\\/:*?\"<>|]"), "_")
-        return listOf("PC", root, t.dir, t.name).filter { it.isNotEmpty() }.joinToString("/")
+    // ───────── Handy → PC: Musik, die am PC fehlt, hochladen; eigene Playlisten übertragen ─────────
+
+    data class UpStatus(val done: Int, val total: Int, val finished: Boolean)
+    val upload = MutableStateFlow<UpStatus?>(null)
+    private val upLock = Mutex()
+    private var lastUp = 0L
+    private val upMap = HashMap<String, Long>() // Handy-Adresse → Titel-ID am PC
+    private fun upFile() = File(app.filesDir, "pc-up.json")
+
+    private fun loadUp() {
+        if (upMap.isNotEmpty()) return
+        try { val o = JSONObject(upFile().readText()); o.keys().forEach { k -> upMap[k] = o.getLong(k) } } catch (_: Exception) { }
     }
 
-    private fun exists(u: Uri): Boolean = try {
-        app.contentResolver.query(u, arrayOf(DocumentsContract.Document.COLUMN_DOCUMENT_ID), null, null, null)?.use { it.moveToFirst() } == true
-    } catch (_: Exception) { false }
+    private fun saveUp() { try { upFile().writeText(JSONObject(upMap as Map<*, *>).toString()) } catch (_: Exception) { } }
+
+    /** Nach dem Abgleich (höchstens alle paar Minuten): fehlende Titel hochladen, Playlisten schicken */
+    suspend fun syncUp(force: Boolean = false) = upLock.withLock {
+        if (token.isEmpty() || !state.value.online) return@withLock
+        if (!force && System.currentTimeMillis() - lastUp < 5 * 60_000L) return@withLock
+        lastUp = System.currentTimeMillis()
+        loadUp()
+        val prefs = Prefs.get(app)
+        val roots = prefs.roots(MUSIC)
+        val tracks = roots.flatMap { r -> Library.dao.tracksOfRoot(r.uri).map { it to r.name } }
+        val byUri = tracks.associateBy { it.first.uri }
+        // 1. Was kennt der PC schon? (Dateiname + Größe oder Interpret + Titel)
+        val unknown = tracks.filter { it.first.uri !in upMap }
+        val missing = ArrayList<Pair<Track, String>>()
+        try {
+            for (chunk in unknown.chunked(300)) {
+                val arr = JSONArray()
+                chunk.forEach { (t, _) ->
+                    arr.put(JSONObject().put("k", t.uri).put("name", t.name).put("size", t.size)
+                        .put("title", t.tagTitle).put("artist", t.tagArtist).put("ms", t.duration.coerceAtLeast(0)))
+                }
+                val o = JSONObject(api("POST", "/have", arr.toString()))
+                o.optJSONObject("found")?.let { f -> f.keys().forEach { k -> upMap[k] = f.getLong(k) } }
+                val m = o.optJSONArray("missing") ?: JSONArray()
+                for (i in 0 until m.length()) byUri[m.getString(i)]?.let { missing += it }
+            }
+            saveUp()
+            // 2. Fehlende hochladen
+            if (missing.isNotEmpty()) {
+                upload.value = UpStatus(0, missing.size, false)
+                var n = 0
+                for ((t, rootName) in missing) {
+                    if (!state.value.online) break
+                    try {
+                        val rel = listOf(rootName, t.dir, t.name).filter { it.isNotEmpty() }.joinToString("/")
+                        val id = uploadFile(t, rel)
+                        if (id != null) upMap[t.uri] = id
+                    } catch (_: Exception) { }
+                    n++
+                    upload.value = UpStatus(n, missing.size, false)
+                    if (n % 10 == 0) saveUp()
+                }
+                saveUp()
+                upload.value = UpStatus(n, missing.size, true)
+            }
+            // 3. Eigene Playlisten (nicht die vom PC)
+            val pls = JSONArray()
+            for (p in Library.dao.allPlaylists().filter { !isPcPlaylist(it.uid) }) {
+                val ids = Library.playlistTracks(p.id).mapNotNull { upMap[it.track.uri] }
+                pls.put(JSONObject().put("uid", "phone-${phoneId()}-${p.uid}").put("name", p.name).put("items", JSONArray(ids)).put("star", p.id == prefs.starId))
+            }
+            api("POST", "/plsync", JSONObject().put("prefix", "phone-${phoneId()}-").put("playlists", pls).toString())
+        } catch (e: Exception) {
+            state.value = state.value.copy(error = e.message)
+        }
+    }
+
+    private fun phoneId(): String {
+        val p = sp()
+        return p.getString("phone", null) ?: java.util.UUID.randomUUID().toString().take(8).also { p.edit().putString("phone", it).apply() }
+    }
+
+    /** Eine Datei an Minimal Library schicken → Titel-ID am PC */
+    private fun uploadFile(t: Track, rel: String): Long? {
+        val enc = rel.split('/').joinToString("/") { java.net.URLEncoder.encode(it, "UTF-8").replace("+", "%20") }
+        val c = URL("http://$addr/up/$enc").openConnection() as HttpURLConnection
+        try {
+            c.requestMethod = "PUT"
+            c.connectTimeout = 5000
+            c.readTimeout = 120_000
+            c.setRequestProperty("X-Token", token)
+            c.doOutput = true
+            if (t.size > 0) c.setFixedLengthStreamingMode(t.size) else c.setChunkedStreamingMode(256 * 1024)
+            app.contentResolver.openInputStream(Uri.parse(t.uri))?.use { inp -> c.outputStream.use { inp.copyTo(it, 256 * 1024) } } ?: return null
+            if (c.responseCode != 200) return null
+            return JSONObject(c.inputStream.use { String(it.readBytes()) }).optLong("id").takeIf { it > 0 }
+        } finally { c.disconnect() }
+    }
 
     /** Datei eines Titels lesen – lokal oder vom PC (für den Export) */
     fun open(ctx: Context, t: Track): InputStream? {
         if (!isPc(t.uri)) return ctx.contentResolver.openInputStream(Uri.parse(t.uri))
         val u = realUri(Uri.parse(t.uri))
         if (u.scheme == "content") return ctx.contentResolver.openInputStream(u)
+        if (u.scheme == "file") return File(u.path ?: return null).inputStream()
         val c = URL(u.toString()).openConnection() as HttpURLConnection
         c.connectTimeout = 5000; c.readTimeout = 60_000
         if (c.responseCode != 200) { c.disconnect(); return null }
