@@ -465,6 +465,11 @@ object Pc {
                     c.inputStream.use { inp -> tmp.outputStream().use { inp.copyTo(it, 256 * 1024) } }
                     if (!tmp.renameTo(f)) throw IllegalStateException("speichern")
                     local[tid] = Uri.fromFile(f).toString()
+                    // Songtext gleich mitnehmen
+                    try {
+                        val (st, body) = request("GET", "http://$addr/l/$tid", timeout = 4000)
+                        if (st == 200 && body.isNotBlank()) File(dir, "$tid.lrc").writeText(body)
+                    } catch (_: Exception) { }
                 } finally { c.disconnect() }
             } catch (_: Exception) { failed++ }
             done++
@@ -472,7 +477,7 @@ object Pc {
         }
         // nicht mehr gewünschte Kopien löschen
         for (tid in local.keys.filter { it !in want.keys }) {
-            local.remove(tid)?.let { u -> try { File(Uri.parse(u).path ?: "").delete() } catch (_: Exception) { } }
+            local.remove(tid)?.let { u -> try { File(Uri.parse(u).path ?: "").delete(); File(dir, "$tid.lrc").delete() } catch (_: Exception) { } }
         }
         saveOffline()
         Library.version.value++
@@ -571,6 +576,17 @@ object Pc {
             if (c.responseCode != 200) return null
             return JSONObject(c.inputStream.use { String(it.readBytes()) }).optLong("id").takeIf { it > 0 }
         } finally { c.disconnect() }
+    }
+
+    /** Songtext eines PC-Titels: Offline-Kopie (.lrc daneben), sonst von Minimal Library */
+    fun lyrics(ctx: Context, uri: String): String? {
+        val tid = trackIdOf(uri) ?: return null
+        local[tid]?.let { u -> File((Uri.parse(u).path ?: "").substringBeforeLast('.') + ".lrc").takeIf { it.exists() }?.let { return it.readText() } }
+        if (addr.isEmpty()) return null
+        return try {
+            val (st, body) = request("GET", "http://$addr/l/$tid", timeout = 4000)
+            if (st == 200) body else null
+        } catch (_: Exception) { null }
     }
 
     /** Datei eines Titels lesen – lokal oder vom PC (für den Export) */

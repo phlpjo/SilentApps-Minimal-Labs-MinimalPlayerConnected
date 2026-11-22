@@ -209,4 +209,5 @@
     <string name="export_hint">Plug in the USB stick (USB-C or adapter) and choose it in the next step. Tracks from the PC are copied over Wi-Fi.</string>
     <string name="pc_offline_mark">offline</string>
     <string name="pc_upload_fmt">To PC: %1$d of %2$d</string>
+    <string name="no_lyrics">No lyrics. Minimal Library can fetch or add them (saved as .lrc next to the song).</string>
 </resources>

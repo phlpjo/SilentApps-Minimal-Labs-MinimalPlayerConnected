@@ -208,4 +208,5 @@
     <string name="export_hint">USB-Stick anstecken (USB-C oder Adapter) und im nächsten Schritt auswählen. Titel vom PC werden übers WLAN kopiert.</string>
     <string name="pc_offline_mark">offline</string>
     <string name="pc_upload_fmt">Zum PC: %1$d von %2$d</string>
+    <string name="no_lyrics">Kein Songtext. Minimal Library kann ihn holen oder hinzufügen (als .lrc neben dem Titel).</string>
 </resources>

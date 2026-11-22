@@ -79,6 +79,7 @@ fun PlayerScreen(ui: Actions, prefs: Prefs, now: NowPlaying) {
     var queueSheet by remember { mutableStateOf(false) }
     var markSheet by remember { mutableStateOf(false) }
     var playlistSheet by remember { mutableStateOf(false) }
+    var showLyrics by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
     var marksTick by remember { mutableIntStateOf(0) }
     val sleepEnd by Sleep.endAt.collectAsState()
     val endOfFile by Sleep.endOfFile.collectAsState()
@@ -127,7 +128,8 @@ fun PlayerScreen(ui: Actions, prefs: Prefs, now: NowPlaying) {
         }
         val md = item.mediaMetadata
         // Cover füllt den freien Raum oben und ist vor „Musik · 10 / 20“ schon ganz ausgeblendet
-        if (prefs.covers && !coverHash.isNullOrEmpty()) CoverArea(coverHash!!, Modifier.weight(2.2f).fillMaxWidth())
+        if (showLyrics) LyricsView(c, item.mediaId, pos, Modifier.weight(2.2f).fillMaxWidth())
+        else if (prefs.covers && !coverHash.isNullOrEmpty()) CoverArea(coverHash!!, Modifier.weight(2.2f).fillMaxWidth())
         else Spacer(Modifier.weight(1f))
         Caption(
             stringResource(if (section == BOOKS) R.string.books else R.string.music) +
@@ -228,6 +230,7 @@ fun PlayerScreen(ui: Actions, prefs: Prefs, now: NowPlaying) {
                 IconChip("timer", sleepValue, Modifier.weight(1f)) { sleepSheet = true }
                 IconChip("queue", queueValue, Modifier.weight(1f)) { queueSheet = true }
                 IconChip("list-plus", "", Modifier.weight(1f)) { playlistSheet = true }
+                IconChip("lyrics", "", Modifier.weight(1f), on = showLyrics) { showLyrics = !showLyrics }
                 if (chapters.isNotEmpty()) Chip(stringResource(R.string.chip_chapters), chapterValue, Modifier.weight(1f)) { chapterSheet = true }
             }
         }
@@ -446,9 +449,9 @@ private fun SleepSheet(prefs: Prefs, end: Long?, endOfFile: Boolean, nowMs: Long
 
 /** Kleine Einstellung im Player: Bezeichnung oben, Wert darunter */
 @Composable
-private fun IconChip(icon: String, value: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
+private fun IconChip(icon: String, value: String, modifier: Modifier = Modifier, on: Boolean = false, onClick: () -> Unit) {
     Row(modifier.tap(onClick = onClick).padding(vertical = 10.dp, horizontal = 2.dp), verticalAlignment = Alignment.CenterVertically) {
-        PIcon(icon, 22.dp, Dim)
+        PIcon(icon, 22.dp, if (on) Ink else Dim)
         if (value.isNotEmpty()) { Spacer(Modifier.width(8.dp)); T(value, size = 15.sp, maxLines = 1) }
     }
 }
