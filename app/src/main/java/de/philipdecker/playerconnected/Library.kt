@@ -133,7 +133,7 @@ data class PlaylistItem(
     val pos: Int,
 )
 
-data class PlaylistInfo(val id: Long, val name: String, val count: Int, val duration: Long)
+data class PlaylistInfo(val id: Long, val name: String, val count: Int, val duration: Long, val uid: String)
 
 /** Summe der bekannten Dauern je Ordnerpfad */
 data class DirDuration(val dir: String, val ms: Long)
@@ -184,6 +184,9 @@ abstract class LibDao {
 
     @Query("SELECT dir AS dir, MIN(cover) AS minC, MAX(cover) AS maxC FROM track WHERE root = :root GROUP BY dir")
     abstract suspend fun dirCovers(root: String): List<DirCover>
+
+    @Query("UPDATE track SET cover = :cover WHERE id IN (:ids)")
+    abstract suspend fun setCover(ids: List<Long>, cover: String)
 
     @Query("SELECT cover FROM track WHERE uri = :uri LIMIT 1")
     abstract suspend fun coverOf(uri: String): String?
@@ -238,7 +241,7 @@ abstract class LibDao {
     // ───── Playlisten ─────
 
     @Query(
-        "SELECT p.id AS id, p.name AS name, " +
+        "SELECT p.id AS id, p.name AS name, p.uid AS uid, " +
             "(SELECT COUNT(*) FROM playlist_item i WHERE i.playlistId = p.id) AS count, " +
             "(SELECT COALESCE(SUM(CASE WHEN t.duration > 0 THEN t.duration ELSE 0 END), 0) FROM playlist_item i JOIN track t ON t.id = i.trackId WHERE i.playlistId = p.id) AS duration " +
             "FROM playlist p ORDER BY p.name COLLATE NOCASE",
@@ -561,7 +564,8 @@ object Library {
                         wanted += r.uri
                         if (scanRoot(ctx, s, r.uri)) changed = true
                     }
-                    dao.knownRoots().filter { it !in wanted }.forEach { dao.drop(it); changed = true }
+                    // Wurzeln vom Computer (Minimal Library) verwaltet Pc selbst
+                    dao.knownRoots().filter { it !in wanted && !Pc.isPcRoot(it) }.forEach { dao.drop(it); changed = true }
                     if (changed) version.value++
                 }
                 prefs.lastScan = System.currentTimeMillis()
@@ -648,7 +652,23 @@ object Library {
             } catch (_: Exception) { /* einzelner Ordner nicht lesbar → überspringen */ }
         }
         if (!ok) return false // Zugriff verloren: alten Stand behalten
+        return applyFresh(rootUri, section, fresh, direct, allDirs)
+    }
 
+    /** Titel vom Computer (Minimal Library) als eigene Wurzel übernehmen. true = etwas geändert */
+    suspend fun mirrorRoot(rootUri: String, fresh: List<Track>): Boolean = lock.withLock {
+        val direct = HashMap<String, Int>()
+        val dirs = LinkedHashSet<String>()
+        for (t in fresh) {
+            direct[t.dir] = (direct[t.dir] ?: 0) + 1
+            var d = t.dir
+            while (d.isNotEmpty()) { dirs += d; d = if (d.contains('/')) d.substringBeforeLast('/') else "" }
+        }
+        withContext(Dispatchers.IO) { applyFresh(rootUri, MUSIC, fresh, direct, dirs.toList()) }
+    }
+
+    /** Abgleich einer Wurzel mit frisch gelesenen Titeln (gemeinsam für Handy-Ordner und Computer) */
+    private suspend fun applyFresh(rootUri: String, section: Int, fresh: List<Track>, direct: Map<String, Int>, allDirs: List<String>): Boolean {
         // Abgleich mit dem bisherigen Stand
         val old = dao.tracksOfRoot(rootUri).associateBy { it.uri }
         val freshUris = HashSet<String>(fresh.size)
@@ -705,12 +725,13 @@ object Library {
         return words.joinToString(" ") { "\"$it*\"" }
     }
 
-    suspend fun search(section: Int, q: String): List<Entry> = withContext(Dispatchers.IO) {
+    suspend fun search(section: Int, q: String, pc: Boolean = false): List<Entry> = withContext(Dispatchers.IO) {
         val fq = ftsQuery(q) ?: return@withContext emptyList()
-        val dirs = dao.searchDirs(q.trim(), section).sortedWith(compareBy(Natural) { it.name })
+        val dirs = dao.searchDirs(q.trim(), section).filter { Pc.isPcRoot(it.root) == pc }.sortedWith(compareBy(Natural) { it.name })
             .map { Entry.Folder(it.root, it.path, it.name, it.files, it.total) }
         val tracks = ((try { dao.search(fq, section) } catch (_: Exception) { emptyList() }) +
-            (if (Prefs.get(app).tagTitles && q.trim().length >= 2) dao.searchTags(q.trim(), section) else emptyList())).distinctBy { it.id }
+            (if ((pc || Prefs.get(app).tagTitles) && q.trim().length >= 2) dao.searchTags(q.trim(), section) else emptyList())).distinctBy { it.id }
+            .filter { Pc.isPcRoot(it.root) == pc }
         dirs + tracks.sortedWith(compareBy(Natural) { label(it) }).map { Entry.File(it) }
     }
 
@@ -736,7 +757,7 @@ object Library {
             'l' -> dao.playlist(k.rest.toLongOrNull() ?: -1)?.name ?: ""
             'q' -> "„${k.rest}“"
             else -> k.rest.substringAfterLast('/').ifEmpty {
-                Prefs.get(app).roots(k.section).firstOrNull { it.uri == k.root }?.name ?: ""
+                (Prefs.get(app).roots(k.section) + Pc.roots()).firstOrNull { it.uri == k.root }?.name ?: ""
             }
         }
     }
@@ -763,7 +784,7 @@ object Library {
             'f' -> listOfNotNull(dao.byUri(k.rest))
             'x' -> listOf(dao.byUri(k.rest) ?: external(k.section, k.rest))
             'l' -> playlistTracks(k.rest.toLongOrNull() ?: -1).map { it.track }
-            'q' -> search(k.section, k.rest).filterIsInstance<Entry.File>().map { it.track }
+            'q' -> search(k.section, k.rest, pc = k.root == "pc").filterIsInstance<Entry.File>().map { it.track }
             'g' -> dao.files(k.root, k.rest).sortedWith(compareBy(Natural) { it.name })
             else -> emptyList()
         }
@@ -788,7 +809,7 @@ object Library {
     /** null = Datei nicht in der Bibliothek (kann keinen Stern bekommen) */
     suspend fun isStarred(uri: String): Boolean? = withContext(Dispatchers.IO) {
         val t = dao.byUri(uri) ?: return@withContext null
-        if (t.section != MUSIC) return@withContext null
+        if (t.section != MUSIC || Pc.isPc(t.uri)) return@withContext null
         val pl = starPlaylist(false) ?: return@withContext false
         dao.inPlaylist(pl, t.id) > 0
     }
@@ -796,7 +817,7 @@ object Library {
     suspend fun toggleStar(uri: String): Boolean? {
         val r = withContext(Dispatchers.IO) {
             val t = dao.byUri(uri) ?: return@withContext null
-            if (t.section != MUSIC) return@withContext null
+            if (t.section != MUSIC || Pc.isPc(t.uri)) return@withContext null
             val pl = starPlaylist(true)!!
             if (dao.inPlaylist(pl, t.id) > 0) { dao.removeTrack(pl, t.id); false }
             else { dao.addToPlaylist(pl, listOf(t.id)); true }
@@ -883,6 +904,13 @@ object Library {
         }
         if (id == Prefs.get(app).starId) stars.value++
         version.value++
+        pushIfPc(id)
+    }
+
+    /** Playlist vom Computer geändert → an Minimal Library schicken */
+    suspend fun pushIfPc(id: Long) {
+        val uid = withContext(Dispatchers.IO) { dao.playlist(id)?.uid }
+        if (Pc.isPcPlaylist(uid)) Pc.push(id)
     }
 
     /** Titel um eine Stelle verschieben (dir = −1 nach oben, +1 nach unten) */
@@ -894,6 +922,7 @@ object Library {
             if (i >= 0 && j in items.indices) dao.swap(items[i], items[j])
         }
         version.value++
+        pushIfPc(id)
     }
 
     /** Titel für „Zu Playlist hinzufügen“ eines Ordners (mit Unterordnern, Abspielreihenfolge) */
@@ -949,6 +978,65 @@ object Library {
         } catch (_: Throwable) {
             export.value = Export(export.value?.done ?: 0, tracks.size, finished = true, failed = true)
         }
+    }
+
+    /**
+     * Mehrere Playlisten auf einen Stick (per Android-Speicherzugriff gewählt) – Aufbau wie in Minimal Library:
+     * "numbered" = Ordner je Playlist, nummeriert · "flat" = Ordner je Playlist · "structured" = gemeinsamer Ordner „Musik“.
+     * Titel vom PC werden übers WLAN geholt (oder aus der Offline-Kopie). Vorhandene gleich große Dateien bleiben.
+     */
+    suspend fun exportMany(ctx: Context, ids: List<Long>, layout: String, target: Uri) = withContext(Dispatchers.IO) {
+        fun clean(s: String) = s.replace(Regex("[\\\\/:*?\"<>|]"), "_").trim().trimEnd('.').take(120).ifEmpty { "_" }
+        fun labelOf(t: Track) = if (t.tagTitle.isNotBlank()) (if (t.tagArtist.isNotBlank()) "${t.tagArtist} - ${t.tagTitle}" else t.tagTitle) else t.title
+        fun extOf(t: Track) = t.name.substringAfterLast('.', "mp3")
+        val lists = ids.mapNotNull { id -> dao.playlist(id)?.let { it to playlistTracks(id).map { pt -> pt.track } } }
+        // Plan: (Titel, Zielpfad) + Playlist-Dateien
+        val files = LinkedHashMap<String, Track>()
+        val byUri = HashMap<String, String>()
+        val m3us = ArrayList<Pair<String, String>>()
+        val used = HashSet<String>()
+        fun uniq(path: String): String {
+            if (used.add(path.lowercase())) return path
+            val base = path.substringBeforeLast('.'); val ext = path.substringAfterLast('.', "")
+            var k = 2
+            while (!used.add("$base ($k).$ext".lowercase())) k++
+            return "$base ($k).$ext"
+        }
+        for ((p, tracks) in lists) {
+            val pl = clean(p.name)
+            val digits = maxOf(2, tracks.size.toString().length)
+            val lines = StringBuilder("#EXTM3U\n")
+            tracks.forEachIndexed { i, t ->
+                val rel = when (layout) {
+                    "structured" -> byUri.getOrPut(t.uri) {
+                        uniq("Musik/" + (t.dir.split('/').filter { it.isNotEmpty() }.map(::clean) + clean(t.name)).joinToString("/")).also { files[it] = t }
+                    }
+                    "flat" -> uniq("$pl/${clean(labelOf(t))}.${extOf(t)}").also { files[it] = t }
+                    else -> uniq("$pl/${String.format("%0${digits}d", i + 1)} - ${clean(labelOf(t))}.${extOf(t)}").also { files[it] = t }
+                }
+                val secs = if (t.duration > 0) t.duration / 1000 else -1
+                lines.append("#EXTINF:").append(secs).append(',').append(labelOf(t)).append('\n')
+                lines.append(if (layout == "structured") rel else rel.substringAfter('/')).append('\n')
+            }
+            m3us += (if (layout == "structured") "$pl.m3u8" else "$pl/$pl.m3u8") to lines.toString()
+        }
+        export.value = Export(0, files.size)
+        var done = 0
+        var failed = 0
+        for ((rel, t) in files) {
+            try {
+                val have = Receive.sizeOf(ctx, target, rel)
+                if (have == null || (t.size > 0 && have != t.size)) {
+                    (Pc.open(ctx, t) ?: throw IllegalStateException("nicht lesbar")).use { Receive.saveFile(ctx, target, rel, it) }
+                }
+            } catch (_: Exception) { failed++ }
+            done++
+            export.value = Export(done, files.size)
+        }
+        for ((rel, text) in m3us) {
+            try { Receive.saveFile(ctx, target, rel, text.toByteArray(Charsets.UTF_8).inputStream()) } catch (_: Exception) { failed++ }
+        }
+        export.value = Export(done, files.size, finished = true, failed = failed > 0)
     }
 
     /** Ordnerpfade wie am PC: Dateien eines Ordners vor seinen Unterordnern, sonst natürlich sortiert */

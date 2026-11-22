@@ -68,7 +68,8 @@ fun HomeScreen(ui: Actions, prefs: Prefs, now: NowPlaying) {
     var query by rememberSaveable(section) { mutableStateOf("") }
     val focus = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
-    val roots = prefs.roots(section)
+    val pcState by Pc.state.collectAsState()
+    val roots = if (section == PC) emptyList() else prefs.roots(section)
     val version by Library.version.collectAsState()
     val scanning by Library.scanning.collectAsState()
 
@@ -89,19 +90,22 @@ fun HomeScreen(ui: Actions, prefs: Prefs, now: NowPlaying) {
             Tab(stringResource(R.string.music), section == MUSIC) { prefs.showSection(MUSIC) }
             Spacer(Modifier.width(22.dp))
             Tab(stringResource(R.string.books), section == BOOKS) { prefs.showSection(BOOKS) }
+            Spacer(Modifier.width(22.dp))
+            Tab(stringResource(R.string.pc_tab), section == PC) { prefs.showSection(PC) }
         }
         Spacer(Modifier.height(22.dp))
-        if (roots.isNotEmpty()) {
+        if (roots.isNotEmpty() || (section == PC && pcState.loaded)) {
             Box(Modifier.floatIn(1)) {
                 SearchField(
                     query, { query = it },
-                    stringResource(if (section == MUSIC) R.string.search_music else R.string.search_books),
+                    stringResource(if (section == BOOKS) R.string.search_books else R.string.search_music),
                     focus, onGo = { keyboard?.hide() },
                 )
             }
         }
         Box(Modifier.weight(1f).fillMaxWidth()) { key(section) {
             when {
+                section == PC -> PcArea(ui, prefs, now, query, version)
                 roots.isEmpty() -> Column(Modifier.align(Alignment.CenterStart).floatIn(2)) {
                     val pending = prefs.pendingRoots(section)
                     if (pending.isNotEmpty()) {
@@ -133,7 +137,7 @@ fun HomeScreen(ui: Actions, prefs: Prefs, now: NowPlaying) {
                             Library.dao.recent(12).filter { p -> Keys.parse(p.id.removePrefix("c|"))?.let { it.root in uris } == true }.take(3)
                         } else emptyList()
                     }
-                    val playlistCount by produceState(0, version) { value = withContext(Dispatchers.IO) { Library.dao.playlists().size } }
+                    val playlistCount by produceState(0, version) { value = withContext(Dispatchers.IO) { Library.dao.playlists().count { !Pc.isPcPlaylist(it.uid) } } }
                     val rootStats by produceState<Stats?>(null, single, version) { value = single?.let { Library.stats(it.uri, "") } }
                     entries?.let { list ->
                         EntryList(
@@ -186,13 +190,13 @@ private fun Tab(text: String, active: Boolean, onClick: () -> Unit) {
 }
 
 @Composable
-private fun SearchResults(ui: Actions, prefs: Prefs, now: NowPlaying, section: Int, query: String, version: Int) {
-    val results by produceState<List<Entry>?>(null, section, query, version) {
+fun SearchResults(ui: Actions, prefs: Prefs, now: NowPlaying, section: Int, query: String, version: Int, pc: Boolean = false) {
+    val results by produceState<List<Entry>?>(null, section, query, version, pc) {
         delay(120)
-        value = Library.search(section, query)
+        value = Library.search(section, query, pc)
     }
     results?.let { list ->
-        val key = if (section == MUSIC) Keys.search(MUSIC, query) else null
+        val key = if (pc) Keys.searchPc(query) else if (section == MUSIC) Keys.search(MUSIC, query) else null
         val hasFiles = list.any { it is Entry.File }
         EntryList(
             ui, prefs, now, section, list, onClose = null, fromSearch = true, searchKey = key,
@@ -452,6 +456,7 @@ private fun FolderMenu(ui: Actions, section: Int, f: Entry.Folder, onDone: () ->
             Option(stringResource(R.string.play_sub)) { onDone(); ui.play(Keys.tree(MUSIC, f.root, f.path)) }
             Option(stringResource(R.string.shuffle_sub)) { onDone(); ui.play(Keys.tree(MUSIC, f.root, f.path), shuffle = true) }
             Option(stringResource(R.string.add_to_playlist)) { addAll = true }
+            if (Pc.isPcRoot(f.root)) PcFolderOptions(f, onDone)
         } else {
             Option(stringResource(if (saved != null && saved?.finished != true) R.string.resume else R.string.play)) { onDone(); ui.play(bookKey, fromStart = saved?.finished == true) }
             if (saved != null && saved?.finished != true) {
@@ -598,6 +603,7 @@ fun SettingsScreen(ui: Actions, prefs: Prefs) {
 
         Section(stringResource(R.string.receive_section))
         Toggle(stringResource(R.string.receive_entry), "") { ui.open(Screen.Receive) }
+        PcSettings()
 
         Section(stringResource(R.string.playback))
         Toggle(stringResource(R.string.skip_back), stringResource(R.string.seconds_fmt, prefs.back)) { prefs.cycleBack() }

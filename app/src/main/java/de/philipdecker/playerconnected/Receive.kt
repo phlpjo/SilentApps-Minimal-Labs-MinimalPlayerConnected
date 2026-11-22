@@ -365,6 +365,52 @@ object Receive {
         return cur
     }
 
+    /** Datei in einen Ordnerbaum schreiben (für „offline verfügbar“) → Dokument-Adresse */
+    fun saveFile(ctx: Context, tree: Uri, rel: String, input: InputStream): String {
+        if (!::app.isInitialized) app = ctx.applicationContext
+        val cr = app.contentResolver
+        val parts = rel.split('/').filter { it.isNotEmpty() }
+        val name = parts.last()
+        val tmp: Uri
+        synchronized(writeLock) {
+            val parent = ensureDir(tree, parts.dropLast(1))
+            children(tree, parent).filter { !it.dir && (it.name.equals(name, true) || it.name.equals("$name.mlpart", true)) }
+                .forEach { try { DocumentsContract.deleteDocument(cr, doc(tree, it.id)) } catch (_: Exception) { } }
+            tmp = DocumentsContract.createDocument(cr, doc(tree, parent), "application/octet-stream", "$name.mlpart")
+                ?: throw IllegalStateException("„$name“ lässt sich nicht anlegen")
+        }
+        try {
+            (cr.openOutputStream(tmp, "w") ?: throw IllegalStateException("kein Schreibzugriff")).use { o -> input.copyTo(o, 256 * 1024) }
+            return (DocumentsContract.renameDocument(cr, tmp, name) ?: throw IllegalStateException("Umbenennen fehlgeschlagen")).toString()
+        } catch (e: Exception) {
+            try { DocumentsContract.deleteDocument(cr, tmp) } catch (_: Exception) { }
+            throw e
+        }
+    }
+
+    /** Größe einer vorhandenen Datei (null = gibt es nicht) */
+    fun sizeOf(ctx: Context, tree: Uri, rel: String): Long? {
+        if (!::app.isInitialized) app = ctx.applicationContext
+        return try { findFile(tree, rel)?.second?.size } catch (_: Exception) { null }
+    }
+
+    /** Leere Unterordner unterhalb von `top` entfernen */
+    fun removeEmptyDirs(ctx: Context, tree: Uri, top: String) {
+        if (!::app.isInitialized) app = ctx.applicationContext
+        val start = try { ensureDirLookup(tree, top.split('/').filter { it.isNotEmpty() }) } catch (_: Exception) { null } ?: return
+        fun walk(id: String): Boolean {
+            val kids = children(tree, id)
+            var empty = true
+            for (k in kids) {
+                if (k.dir && walk(k.id)) {
+                    try { DocumentsContract.deleteDocument(app.contentResolver, doc(tree, k.id)) } catch (_: Exception) { empty = false }
+                } else empty = false
+            }
+            return empty
+        }
+        synchronized(writeLock) { try { walk(start) } catch (_: Exception) { } }
+    }
+
     /** Nach dem Sync: Ordner einlesen, Playlisten aus Minimal Library übernehmen */
     private suspend fun finish(tree: Uri, json: String) {
         try {

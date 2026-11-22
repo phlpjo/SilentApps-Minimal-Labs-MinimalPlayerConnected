@@ -135,7 +135,8 @@ object Sync {
         val prefs = Prefs.get(app)
         val roots = listOf(MUSIC, BOOKS).map { s -> prefs.roots(s) + prefs.pendingRoots(s) }
         val star = prefs.starId
-        val pls = Library.dao.allPlaylists().map { p ->
+        // Playlisten vom Computer (Minimal Library) gehören nicht zum Abgleich der beiden Apps
+        val pls = Library.dao.allPlaylists().filter { !Pc.isPcPlaylist(it.uid) }.map { p ->
             PL(p.uid, p.name, p.id == star, Library.playlistTracks(p.id).map { it.track.uri })
         }
         return State(canon.stamp, roots, pls)
@@ -205,7 +206,7 @@ object Sync {
             if (p.star) prefs.starId = id
             out += p.copy(pending = p.tracks.filter { it !in foundUris }.toSet())
         }
-        dao.allPlaylists().filter { it.uid !in keep }.forEach { dao.deletePlaylist(it.id) }
+        dao.allPlaylists().filter { it.uid !in keep && !Pc.isPcPlaylist(it.uid) }.forEach { dao.deletePlaylist(it.id) }
         canon = State(s.stamp, s.roots, out)
         save()
         Library.stars.value++

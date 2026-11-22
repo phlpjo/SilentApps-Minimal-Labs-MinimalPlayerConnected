@@ -14,6 +14,8 @@ import java.text.Normalizer
 /** Bereiche: Musik und Hörbücher */
 const val MUSIC = 0
 const val BOOKS = 1
+/** Bereich „PC“ (Bibliothek in Minimal Library) – nur als Anzeige-Bereich; die Titel selbst gehören zu Musik */
+const val PC = 2
 
 /** Ein vom Nutzer gewählter Ordner (Speicherzugriff über Android, Baum-URI) */
 data class Root(val uri: String, val name: String)
@@ -79,6 +81,8 @@ object Keys {
     fun group(section: Int, root: String, dir: String) = "g|$section|$root|$dir"
     /** Suchergebnis als Titelliste (nur Musik) */
     fun search(section: Int, q: String) = "q|$section|-|${q.trim()}"
+    /** Suche im Bereich PC */
+    fun searchPc(q: String) = "q|$MUSIC|pc|${q.trim()}"
     /** Playlist (nur Musik) */
     fun playlist(id: Long) = "l|$MUSIC|-|$id"
 

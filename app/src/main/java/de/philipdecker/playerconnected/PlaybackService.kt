@@ -94,7 +94,13 @@ class PlaybackService : MediaLibraryService() {
         super.onCreate()
         prefs = Prefs.get(this)
         Library.init(this)
+        Pc.init(this)
+        // Titel vom Computer (mlpc://…): beim Öffnen auf Offline-Kopie oder Stream umleiten
+        val sources = androidx.media3.exoplayer.source.DefaultMediaSourceFactory(
+            androidx.media3.datasource.ResolvingDataSource.Factory(androidx.media3.datasource.DefaultDataSource.Factory(this)) { Pc.resolve(it) },
+        )
         exo = ExoPlayer.Builder(this)
+            .setMediaSourceFactory(sources)
             .setAudioAttributes(
                 AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MUSIC).build(),
                 /* handleAudioFocus = */ true,

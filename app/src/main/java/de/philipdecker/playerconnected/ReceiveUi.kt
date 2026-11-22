@@ -38,13 +38,11 @@ fun ReceiveScreen(ui: Actions) {
     val st by Receive.status.collectAsState()
     val version by Library.version.collectAsState()
     val forgotten = remember { mutableIntStateOf(0) }
+    // Empfang läuft, solange die App offen ist; hier bleibt zusätzlich der Bildschirm an
     DisposableEffect(Unit) {
         Receive.start(ctx)
         view.keepScreenOn = true
-        onDispose {
-            view.keepScreenOn = false
-            Receive.stop()
-        }
+        onDispose { view.keepScreenOn = false }
     }
     val folder = Receive.folder(ctx)
     val folderName by produceState<String?>(null, folder, version) {

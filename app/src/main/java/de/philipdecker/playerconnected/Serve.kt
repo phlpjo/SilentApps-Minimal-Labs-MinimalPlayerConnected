@@ -69,7 +69,13 @@ object Serve {
     fun publish(ctx: Context, host: String, item: MediaItem): Published {
         val port = ensure(ctx)
         val ip = localAddressFor(host)
-        val uri = item.localConfiguration?.uri ?: item.requestMetadata.mediaUri ?: Uri.parse(item.mediaId)
+        val uri0 = item.localConfiguration?.uri ?: item.requestMetadata.mediaUri ?: Uri.parse(item.mediaId)
+        val uri = Pc.realUri(uri0)
+        // Titel vom Computer: der Lautsprecher holt ihn direkt bei Minimal Library
+        if (uri.scheme == "http") {
+            val ext = uri0.toString().substringAfterLast('.', "mp3").lowercase()
+            return Published(uri.toString(), mimeOf(ext, null), Pc.coverUrl(uri0.toString()), durationOf(ctx, item.mediaId, uri))
+        }
         val name = displayName(ctx, uri) ?: uri.lastPathSegment ?: "audio"
         val ext = name.substringAfterLast('.', "").lowercase().takeIf { it.length in 2..4 && it.all(Char::isLetterOrDigit) } ?: "mp3"
         val mime = mimeOf(ext, ctx.contentResolver.getType(uri))

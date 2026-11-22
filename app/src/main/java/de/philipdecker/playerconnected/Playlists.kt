@@ -57,9 +57,11 @@ import kotlinx.coroutines.withContext
 fun PlaylistsScreen(ui: Actions, now: NowPlaying) {
     val version by Library.version.collectAsState()
     // „Stern“ immer zuerst
-    val lists by produceState<List<PlaylistInfo>?>(null, version) {
+    // Bereich PC: nur Playlisten aus Minimal Library, sonst nur die eigenen
+    val pcArea = Prefs.get(androidx.compose.ui.platform.LocalContext.current).section == PC
+    val lists by produceState<List<PlaylistInfo>?>(null, version, pcArea) {
         val star = Library.starPlaylist(false)
-        value = withContext(Dispatchers.IO) { Library.dao.playlists() }.sortedBy { if (it.id == star) 0 else 1 }
+        value = withContext(Dispatchers.IO) { Library.dao.playlists() }.filter { Pc.isPcPlaylist(it.uid) == pcArea }.sortedBy { if (it.id == star) 0 else 1 }
     }
     var naming by remember { mutableStateOf(false) }
     var menu by remember { mutableStateOf<PlaylistInfo?>(null) }
@@ -74,8 +76,12 @@ fun PlaylistsScreen(ui: Actions, now: NowPlaying) {
     ) {
         Spacer(Modifier.height(24.dp))
         T(stringResource(R.string.playlists), size = 30.sp, weight = FontWeight.Light, glow = true, maxLines = 1, modifier = Modifier.floatIn(0))
-        T(stringResource(R.string.new_playlist), size = 18.sp, color = Dim, maxLines = 1,
-            modifier = Modifier.floatIn(1).tap { naming = true }.padding(vertical = 12.dp))
+        Row(Modifier.floatIn(1)) {
+            T(stringResource(R.string.new_playlist), size = 18.sp, color = Dim, maxLines = 1,
+                modifier = Modifier.tap { naming = true }.padding(vertical = 12.dp).padding(end = 22.dp))
+            T(stringResource(R.string.export_usb), size = 18.sp, color = Dim, maxLines = 1,
+                modifier = Modifier.tap { ui.open(Screen.Export(null)) }.padding(vertical = 12.dp))
+        }
         BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().pullOffset(pull)) {
             val half = maxHeight / 2
             LazyColumn(
@@ -109,7 +115,10 @@ fun PlaylistsScreen(ui: Actions, now: NowPlaying) {
     val scope = rememberCoroutineScope()
     if (naming) NameInput(stringResource(R.string.new_playlist).removePrefix("+ "), "", onCancel = { naming = false }) { name ->
         naming = false
-        scope.launch { val id = Library.createPlaylist(name); ui.open(Screen.Playlist(id, name)) }
+        scope.launch {
+            val id = if (pcArea) Pc.createPlaylist(name) else Library.createPlaylist(name)
+            if (id != null) ui.open(Screen.Playlist(id, name))
+        }
     }
     menu?.let { p -> PlaylistMenu(ui, p.id, p.name) { menu = null } }
 }
@@ -121,7 +130,7 @@ fun PlaylistMenu(ui: Actions, id: Long, name: String, onDeleted: () -> Unit = {}
     var renaming by remember { mutableStateOf(false) }
     if (renaming) {
         NameInput(stringResource(R.string.rename), name, onCancel = onDone) { n ->
-            Library.bg.launch { withContext(Dispatchers.IO) { Library.dao.renamePlaylist(id, n.trim()) }; Library.version.value++ }
+            Library.bg.launch { withContext(Dispatchers.IO) { Library.dao.renamePlaylist(id, n.trim()) }; Library.version.value++; Library.pushIfPc(id) }
             onDone()
         }
         return
@@ -132,9 +141,15 @@ fun PlaylistMenu(ui: Actions, id: Long, name: String, onDeleted: () -> Unit = {}
         Option(stringResource(R.string.play)) { onDone(); ui.play(Keys.playlist(id)) }
         Option(stringResource(R.string.shuffle)) { onDone(); ui.play(Keys.playlist(id), shuffle = true) }
         Option(stringResource(R.string.rename)) { renaming = true }
-        Option(stringResource(R.string.export)) { onDone(); ui.exportPlaylist(id) }
+        Option(stringResource(R.string.export)) { onDone(); ui.open(Screen.Export(id)) }
+        val uid by produceState<String?>(null, id) { value = withContext(Dispatchers.IO) { Library.dao.playlist(id)?.uid } }
+        if (Pc.isPcPlaylist(uid)) {
+            val pin = Pc.playlistPin(uid!!)
+            val pinned = Pc.isPinned(pin)
+            Option(stringResource(if (pinned) R.string.pc_offline_off else R.string.pc_offline_on)) { Pc.setPinned(pin, !pinned); onDone() }
+        }
         HoldOption(stringResource(R.string.delete)) {
-            Library.bg.launch { withContext(Dispatchers.IO) { Library.dao.deletePlaylist(id) }; Library.stars.value++; Library.version.value++ }
+            Library.bg.launch { Pc.deleteOnPc(id); withContext(Dispatchers.IO) { Library.dao.deletePlaylist(id) }; Library.stars.value++; Library.version.value++ }
             onDone(); onDeleted()
         }
         Option(stringResource(R.string.cancel), color = Dim) { onDone() }
@@ -212,7 +227,7 @@ fun PlaylistScreen(ui: Actions, prefs: Prefs, now: NowPlaying, s: Screen.Playlis
             Option(stringResource(R.string.move_up), enabled = i > 0) { Library.bg.launch { Library.movePlaylistItem(s.id, t.itemId, -1) }; itemMenu = null }
             Option(stringResource(R.string.move_down), enabled = i in 0 until all.lastIndex) { Library.bg.launch { Library.movePlaylistItem(s.id, t.itemId, 1) }; itemMenu = null }
             Option(stringResource(R.string.remove_from_playlist)) {
-                Library.bg.launch { withContext(Dispatchers.IO) { Library.dao.removeItem(t.itemId) }; Library.stars.value++; Library.version.value++ }
+                Library.bg.launch { withContext(Dispatchers.IO) { Library.dao.removeItem(t.itemId) }; Library.stars.value++; Library.version.value++; Library.pushIfPc(s.id) }
                 itemMenu = null
             }
             Option(stringResource(R.string.cancel), color = Dim) { itemMenu = null }
@@ -232,16 +247,25 @@ fun AddToPlaylistSheet(load: suspend () -> List<Long>, onDone: () -> Unit) {
     val scope = rememberCoroutineScope()
     val version by Library.version.collectAsState()
     val ids by produceState<List<Long>?>(null) { value = load() }
-    val lists by produceState<List<PlaylistInfo>?>(null, version) {
+    // Titel vom PC nur in PC-Playlisten, eigene Titel nur in eigene
+    val pcTracks by produceState<Boolean?>(null) {
+        value = withContext(Dispatchers.IO) { ids?.firstOrNull()?.let { Library.dao.tracksById(listOf(it)).firstOrNull()?.uri } }?.let { Pc.isPc(it) }
+            ?: withContext(Dispatchers.IO) { load().firstOrNull()?.let { Library.dao.tracksById(listOf(it)).firstOrNull()?.uri } }?.let { Pc.isPc(it) } ?: false
+    }
+    val lists by produceState<List<PlaylistInfo>?>(null, version, pcTracks) {
         val star = Library.starPlaylist(false)
-        value = withContext(Dispatchers.IO) { Library.dao.playlists() }.sortedBy { if (it.id == star) 0 else 1 }
+        val pc = pcTracks ?: return@produceState
+        value = withContext(Dispatchers.IO) { Library.dao.playlists() }.filter { Pc.isPcPlaylist(it.uid) == pc && !(pc && Pc.isSmart(it.uid)) }.sortedBy { if (it.id == star) 0 else 1 }
     }
     val inside by produceState<Map<Long, Int>>(emptyMap(), ids, version) { value = ids?.let { Library.membership(it) } ?: emptyMap() }
     var naming by remember { mutableStateOf(false) }
     if (naming) {
         NameInput(stringResource(R.string.new_playlist).removePrefix("+ "), "", onCancel = { naming = false }) { name ->
             naming = false
-            scope.launch { val id = Library.createPlaylist(name); ids?.let { Library.setInPlaylist(id, it, true) } }
+            scope.launch {
+                val id = if (pcTracks == true) Pc.createPlaylist(name) else Library.createPlaylist(name)
+                if (id != null) ids?.let { Library.setInPlaylist(id, it, true) }
+            }
         }
         return
     }

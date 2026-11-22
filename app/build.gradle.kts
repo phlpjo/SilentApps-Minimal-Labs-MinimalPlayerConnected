@@ -76,6 +76,7 @@ dependencies {
     val media3 = "1.9.2"
     implementation("androidx.media3:media3-exoplayer:$media3")
     implementation("androidx.media3:media3-session:$media3")
+    implementation("androidx.media3:media3-datasource:$media3")
 
     val room = "2.7.2"
     implementation("androidx.room:room-runtime:$room")

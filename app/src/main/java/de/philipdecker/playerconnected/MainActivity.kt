@@ -19,6 +19,10 @@ import androidx.compose.animation.scaleOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.ui.Alignment
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
@@ -47,6 +51,7 @@ sealed interface Screen {
     data object Settings : Screen
     data object Licenses : Screen
     data object Receive : Screen
+    data class Export(val preselect: Long?) : Screen
     data object Playlists : Screen
     data class Playlist(val id: Long, val name: String) : Screen
 }
@@ -96,6 +101,8 @@ interface Actions {
     fun rescan()
     fun exportPlaylist(id: Long)
     fun pickReceiveFolder()
+    /** Playlisten auf einen Stick: Ziel wählen lassen, dann exportieren */
+    fun exportTo(ids: List<Long>, layout: String)
 }
 
 class MainActivity : ComponentActivity(), Actions {
@@ -116,11 +123,13 @@ class MainActivity : ComponentActivity(), Actions {
     }
 
     /** Export-Ziel wählen (Ordner mit Schreibrecht), dann im Hintergrund kopieren */
-    private var exportId = -1L
+    private var exportIds: List<Long> = emptyList()
+    private var exportLayout = "numbered"
     private val exportPicker = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
-        if (uri != null && exportId >= 0) {
-            val id = exportId
-            scope.launch { Library.exportPlaylist(this@MainActivity, id, uri) }
+        if (uri != null && exportIds.isNotEmpty()) {
+            val ids = exportIds
+            val layout = exportLayout
+            scope.launch { Library.exportMany(this@MainActivity, ids, layout, uri) }
         }
     }
 
@@ -139,8 +148,11 @@ class MainActivity : ComponentActivity(), Actions {
         try { receivePicker.launch(null) } catch (_: Exception) { }
     }
 
-    override fun exportPlaylist(id: Long) {
-        exportId = id
+    override fun exportPlaylist(id: Long) = open(Screen.Export(id))
+
+    override fun exportTo(ids: List<Long>, layout: String) {
+        exportIds = ids
+        exportLayout = layout
         try { exportPicker.launch(null) } catch (_: Exception) { }
     }
 
@@ -153,6 +165,7 @@ class MainActivity : ComponentActivity(), Actions {
         super.onCreate(savedInstanceState)
         prefs = Prefs.get(this)
         Library.init(this)
+        Pc.init(this)
         if (intent?.getBooleanExtra("player", false) == true) stack.add(Screen.Player)
         takeExternal(intent)
 
@@ -193,11 +206,14 @@ class MainActivity : ComponentActivity(), Actions {
                                 Screen.Settings -> SettingsScreen(this@MainActivity, prefs)
                                 Screen.Licenses -> LicensesScreen(this@MainActivity)
                                 Screen.Receive -> ReceiveScreen(this@MainActivity)
+                                is Screen.Export -> ExportScreen(this@MainActivity, s)
                                 Screen.Playlists -> PlaylistsScreen(this@MainActivity, now)
                                 is Screen.Playlist -> PlaylistScreen(this@MainActivity, prefs, now, s)
                             }
                         }
                     }
+                    // Fortschritt (Empfang, Offline, Export) in jedem Bildschirm
+                    TransferLine(Modifier.align(Alignment.TopCenter).windowInsetsPadding(WindowInsets.statusBars))
                 }
             }
         }
@@ -209,6 +225,7 @@ class MainActivity : ComponentActivity(), Actions {
         Screen.Settings -> 50
         Screen.Licenses -> 51
         Screen.Receive -> 52
+        is Screen.Export -> 12
         Screen.Playlists -> 10
         is Screen.Playlist -> 11
         Screen.Player -> 100
@@ -232,6 +249,9 @@ class MainActivity : ComponentActivity(), Actions {
     override fun onStart() {
         super.onStart()
         Sync.refresh()
+        // Solange die App offen ist (jeder Bildschirm): Empfang von Minimal Library und Verbindung zum PC
+        Receive.start(this)
+        Pc.start(this)
         val token = SessionToken(this, ComponentName(this, PlaybackService::class.java))
         val f = MediaController.Builder(this, token).buildAsync()
         future = f
@@ -248,6 +268,8 @@ class MainActivity : ComponentActivity(), Actions {
 
     override fun onStop() {
         super.onStop()
+        Receive.stop()
+        Pc.stop()
         ctrl?.removeListener(listener)
         future?.let { MediaController.releaseFuture(it) }
         future = null

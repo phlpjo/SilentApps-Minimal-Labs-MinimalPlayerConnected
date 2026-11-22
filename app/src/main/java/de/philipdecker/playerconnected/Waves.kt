@@ -82,7 +82,8 @@ object Waves {
         val app = ctx.applicationContext
         job = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + slow).launch {
             cleanOld(app)
-            val uris = try { Library.dao.urisOf(MUSIC) } catch (_: Exception) { emptyList() }
+            // Titel vom Computer nicht vorab (würde die ganze Bibliothek übers WLAN laden)
+            val uris = try { Library.dao.urisOf(MUSIC).filter { !Pc.isPc(it) } } catch (_: Exception) { emptyList() }
             for (u in uris) {
                 ensureActive()
                 val k = key(u)
@@ -164,7 +165,7 @@ object Waves {
         val ex = MediaExtractor()
         var codec: MediaCodec? = null
         try {
-            ex.setDataSource(ctx, Uri.parse(uri), null)
+            ex.setDataSource(ctx, Pc.realUri(Uri.parse(uri)), null)
             var track = -1
             var fmt: MediaFormat? = null
             for (i in 0 until ex.trackCount) {
