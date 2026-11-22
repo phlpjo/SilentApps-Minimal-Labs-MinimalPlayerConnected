@@ -330,7 +330,8 @@ object Receive {
                     o.write(buf, 0, n)
                 }
             }
-            if (r.body is Limited && !(r.body as Limited).complete) throw IllegalStateException("Übertragung unvollständig")
+            val complete = when (val b = r.body) { is Limited -> b.complete; is Chunked -> b.complete; else -> true }
+            if (!complete) throw IllegalStateException("Übertragung unvollständig")
             DocumentsContract.renameDocument(cr, tmp, name) ?: throw IllegalStateException("Umbenennen fehlgeschlagen")
         } catch (e: Exception) {
             try { DocumentsContract.deleteDocument(cr, tmp) } catch (_: Exception) { }
@@ -421,13 +422,15 @@ object Receive {
     private class Chunked(private val inp: InputStream) : InputStream() {
         private var left = 0L
         private var end = false
+        /** Abschluss-Block (Länge 0) gesehen → alles angekommen */
+        var complete = false
         private fun next(): Boolean {
             if (end) return false
             if (left == 0L) {
                 var line = readRaw() ?: return false.also { end = true }
                 if (line.isEmpty()) line = readRaw() ?: return false.also { end = true }
                 left = line.substringBefore(';').trim().toLongOrNull(16) ?: 0L
-                if (left == 0L) { end = true; return false }
+                if (left == 0L) { end = true; complete = true; return false }
             }
             return true
         }
