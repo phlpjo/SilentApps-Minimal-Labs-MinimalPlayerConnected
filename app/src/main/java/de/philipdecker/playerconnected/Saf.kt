@@ -51,12 +51,14 @@ object Saf {
     }
 
     /** Größe einer vorhandenen Datei (null = gibt es nicht) */
-    fun sizeOf(ctx: Context, tree: Uri, rel: String): Long? = try {
-        val parts = rel.split('/').filter { it.isNotEmpty() }
-        var cur = DocumentsContract.getTreeDocumentId(tree)
-        for (p in parts.dropLast(1)) cur = children(ctx, tree, cur).firstOrNull { it.dir && it.name.equals(p, true) }?.id ?: return null
-        children(ctx, tree, cur).firstOrNull { !it.dir && it.name.equals(parts.last(), true) }?.size
-    } catch (_: Exception) { null }
+    fun sizeOf(ctx: Context, tree: Uri, rel: String): Long? {
+        return try {
+            val parts = rel.split('/').filter { it.isNotEmpty() }
+            var cur = DocumentsContract.getTreeDocumentId(tree)
+            for (p in parts.dropLast(1)) cur = children(ctx, tree, cur).firstOrNull { it.dir && it.name.equals(p, true) }?.id ?: return null
+            children(ctx, tree, cur).firstOrNull { !it.dir && it.name.equals(parts.last(), true) }?.size
+        } catch (_: Exception) { null }
+    }
 
     /** Datei schreiben (erst „.part“, dann umbenennen – nie halbe Dateien) → Dokument-Adresse */
     fun saveFile(ctx: Context, tree: Uri, rel: String, input: InputStream): String {
