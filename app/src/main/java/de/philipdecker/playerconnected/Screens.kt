@@ -184,6 +184,16 @@ fun HomeScreen(ui: Actions, prefs: Prefs, now: NowPlaying) {
     }
 }
 
+/** Kleiner Link „Einstellungen“ oben rechts (wie auf der Startseite) – in jeder Ebene erreichbar */
+@Composable
+fun SettingsLink(ui: Actions) {
+    Row(Modifier.fillMaxWidth().floatIn(0)) {
+        Spacer(Modifier.weight(1f))
+        T(stringResource(R.string.settings), size = 13.sp, color = Faint, spacing = 0.8.sp, maxLines = 1,
+            modifier = Modifier.tap { ui.open(Screen.Settings) }.padding(start = 12.dp, top = 10.dp, bottom = 4.dp))
+    }
+}
+
 @Composable
 private fun Tab(text: String, active: Boolean, onClick: () -> Unit) {
     T(text, size = if (active) 28.sp else 22.sp, weight = FontWeight.Light, color = if (active) Ink else Faint, glow = active, maxLines = 1,
@@ -233,7 +243,7 @@ fun FolderScreen(ui: Actions, prefs: Prefs, now: NowPlaying, s: Screen.Folder) {
             .windowInsetsPadding(WindowInsets.systemBars)
             .padding(horizontal = 32.dp),
     ) {
-        Spacer(Modifier.height(24.dp))
+        SettingsLink(ui)
         T(s.name, size = 30.sp, weight = FontWeight.Light, glow = true, maxLines = 2, modifier = Modifier.floatIn(0))
         val sub = s.path.substringBeforeLast('/', "").replace("/", "  ›  ")
         if (sub.isNotEmpty()) T(sub, size = 13.sp, color = Faint, spacing = 0.8.sp, maxLines = 1, modifier = Modifier.floatIn(1))
@@ -554,8 +564,10 @@ fun MiniPlayer(ui: Actions, now: NowPlaying) {
             }
             if (now.section == BOOKS) QuickBookmark(ui, 18.dp, Modifier.padding(start = 14.dp, top = 10.dp, bottom = 10.dp, end = 2.dp))
             OutputMini(ui, now, Modifier.padding(start = 16.dp))
-            T(stringResource(if (now.playing) R.string.pause else R.string.play), size = 16.sp, color = if (now.playing) Ink else Dim, maxLines = 1,
-                modifier = Modifier.tap { ui.toggle() }.padding(start = 16.dp, top = 10.dp, bottom = 10.dp))
+            Box(Modifier.tap { ui.toggle() }.padding(start = 14.dp, top = 8.dp, bottom = 8.dp)) { PIcon(if (now.playing) "pause" else "play", 26.dp) }
+            Box(Modifier.tap { if (c.hasNextMediaItem()) c.seekToNextMediaItem() }.padding(start = 12.dp, top = 8.dp, bottom = 8.dp)) {
+                PIcon("next", 20.dp, if (c.hasNextMediaItem()) Dim else Faint)
+            }
         }
     }
 }

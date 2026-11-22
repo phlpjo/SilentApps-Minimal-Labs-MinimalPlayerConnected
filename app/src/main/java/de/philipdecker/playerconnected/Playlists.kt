@@ -75,7 +75,7 @@ fun PlaylistsScreen(ui: Actions, now: NowPlaying) {
             .windowInsetsPadding(WindowInsets.systemBars)
             .padding(horizontal = 32.dp),
     ) {
-        Spacer(Modifier.height(24.dp))
+        SettingsLink(ui)
         T(stringResource(R.string.playlists), size = 30.sp, weight = FontWeight.Light, glow = true, maxLines = 1, modifier = Modifier.floatIn(0))
         Row(Modifier.floatIn(1)) {
             T(stringResource(R.string.new_playlist), size = 18.sp, color = Dim, maxLines = 1,
@@ -180,7 +180,7 @@ fun PlaylistScreen(ui: Actions, prefs: Prefs, now: NowPlaying, s: Screen.Playlis
             .windowInsetsPadding(WindowInsets.systemBars)
             .padding(horizontal = 32.dp),
     ) {
-        Spacer(Modifier.height(24.dp))
+        SettingsLink(ui)
         T(name, size = 30.sp, weight = FontWeight.Light, glow = true, maxLines = 2, modifier = Modifier.floatIn(0).tap(onLong = { menu = true }) {})
         tracks?.let { list ->
             val ms = list.sumOf { t -> t.track.duration.coerceAtLeast(0L) }

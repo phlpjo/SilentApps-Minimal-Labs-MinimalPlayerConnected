@@ -58,6 +58,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.size
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.ImeAction
@@ -155,39 +156,51 @@ fun PlayerScreen(ui: Actions, prefs: Prefs, now: NowPlaying) {
         SeekBar(c, pos, dur, if (dur > 0) chapters.drop(1).map { it.start.toFloat() / dur } else emptyList(), item.mediaId)
 
         Spacer(Modifier.height(30.dp))
+        // Steuerung wie in Minimal Library: Zufall · Zurück · Play/Pause · Weiter · Wiederholen (Hörbücher: −/+ Sekunden statt Zufall/Wiederholen)
+        val prev = {
+            val p = c.currentPosition
+            val i = Chapters.indexAt(chapters, p)
+            when {
+                i >= 0 && p - chapters[i].start > 3000L -> c.seekTo(chapters[i].start)
+                i > 0 -> c.seekTo(chapters[i - 1].start)
+                p > 3000L || !c.hasPreviousMediaItem() -> c.seekTo(0L)
+                else -> c.seekToPreviousMediaItem()
+            }
+        }
+        val hasNext = (ci >= 0 && ci < chapters.lastIndex) || c.hasNextMediaItem()
+        val next = {
+            val i = Chapters.indexAt(chapters, c.currentPosition)
+            when {
+                i >= 0 && i < chapters.lastIndex -> c.seekTo(chapters[i + 1].start)
+                c.hasNextMediaItem() -> c.seekToNextMediaItem()
+            }
+        }
         Row(Modifier.fillMaxWidth().floatIn(4), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            T("−${prefs.back}", size = 22.sp, weight = FontWeight.Light,
-                modifier = Modifier.tap { c.seekTo((c.currentPosition - prefs.back * 1000L).coerceAtLeast(0L)) }.padding(vertical = 12.dp, horizontal = 4.dp))
-            T(stringResource(if (now.playing) R.string.pause else R.string.play), size = 34.sp, weight = FontWeight.Light, glow = true,
-                align = TextAlign.Center, modifier = Modifier.tap { ui.toggle() }.padding(12.dp))
-            T("+${prefs.forward}", size = 22.sp, weight = FontWeight.Light,
-                modifier = Modifier.tap {
+            if (section == BOOKS) {
+                Box(Modifier.tap { c.seekTo((c.currentPosition - prefs.back * 1000L).coerceAtLeast(0L)) }.padding(10.dp), contentAlignment = Alignment.Center) {
+                    PIcon("back", 30.dp, Dim)
+                    T("${prefs.back}", size = 9.sp, color = Dim, modifier = Modifier.padding(top = 3.dp))
+                }
+            } else {
+                Toggled("shuffle", now.shuffle) { c.shuffleModeEnabled = !c.shuffleModeEnabled }
+            }
+            Box(Modifier.tap { prev() }.padding(10.dp)) { PIcon("prev", 30.dp) }
+            Box(Modifier.tap { ui.toggle() }.padding(10.dp)) { PIcon(if (now.playing) "pause" else "play", 54.dp) }
+            Box(Modifier.tap { next() }.padding(10.dp)) { PIcon("next", 30.dp, if (hasNext) Ink else Faint) }
+            if (section == BOOKS) {
+                Box(Modifier.tap {
                     val d = c.duration
                     val target = c.currentPosition + prefs.forward * 1000L
                     c.seekTo(if (d != C.TIME_UNSET && d > 0) target.coerceAtMost(d - 500L) else target)
-                }.padding(vertical = 12.dp, horizontal = 4.dp))
-        }
-        Spacer(Modifier.height(8.dp))
-        // Zurück/Weiter: bei Kapiteln kapitelweise, sonst dateiweise
-        Row(Modifier.fillMaxWidth().floatIn(5), horizontalArrangement = Arrangement.SpaceBetween) {
-            T(stringResource(R.string.previous), size = 16.sp, color = Dim, modifier = Modifier.tap {
-                val p = c.currentPosition
-                val i = Chapters.indexAt(chapters, p)
-                when {
-                    i >= 0 && p - chapters[i].start > 3000L -> c.seekTo(chapters[i].start)
-                    i > 0 -> c.seekTo(chapters[i - 1].start)
-                    p > 3000L || !c.hasPreviousMediaItem() -> c.seekTo(0L)
-                    else -> c.seekToPreviousMediaItem()
+                }.padding(10.dp), contentAlignment = Alignment.Center) {
+                    PIcon("forward", 30.dp, Dim)
+                    T("${prefs.forward}", size = 9.sp, color = Dim, modifier = Modifier.padding(top = 3.dp))
                 }
-            }.padding(vertical = 10.dp))
-            val hasNext = (ci >= 0 && ci < chapters.lastIndex) || c.hasNextMediaItem()
-            T(stringResource(R.string.next), size = 16.sp, color = if (hasNext) Dim else Faint, modifier = Modifier.tap {
-                val i = Chapters.indexAt(chapters, c.currentPosition)
-                when {
-                    i >= 0 && i < chapters.lastIndex -> c.seekTo(chapters[i + 1].start)
-                    c.hasNextMediaItem() -> c.seekToNextMediaItem()
+            } else {
+                Toggled(if (now.repeat == Player.REPEAT_MODE_ONE) "repeat1" else "repeat", now.repeat != Player.REPEAT_MODE_OFF) {
+                    c.repeatMode = when (c.repeatMode) { Player.REPEAT_MODE_OFF -> Player.REPEAT_MODE_ALL; Player.REPEAT_MODE_ALL -> Player.REPEAT_MODE_ONE; else -> Player.REPEAT_MODE_OFF }
                 }
-            }.padding(vertical = 10.dp))
+            }
         }
 
         Spacer(Modifier.weight(0.7f))
@@ -202,7 +215,7 @@ fun PlayerScreen(ui: Actions, prefs: Prefs, now: NowPlaying) {
         if (section == BOOKS) {
             Row(Modifier.fillMaxWidth().floatIn(6)) {
                 Chip(stringResource(R.string.chip_speed), speedLabel(now.speed), Modifier.weight(1f)) { speedSheet = true }
-                Chip(stringResource(R.string.chip_sleep), sleepValue, Modifier.weight(1f)) { sleepSheet = true }
+                IconChip("timer", sleepValue, Modifier.weight(1f)) { sleepSheet = true }
                 Chip(stringResource(R.string.chip_marks), if (marks.isEmpty()) "+" else "${marks.size}", Modifier.weight(1f)) { markSheet = true }
             }
             Row(Modifier.fillMaxWidth().floatIn(7)) {
@@ -212,21 +225,10 @@ fun PlayerScreen(ui: Actions, prefs: Prefs, now: NowPlaying) {
             }
         } else {
             Row(Modifier.fillMaxWidth().floatIn(6)) {
-                Chip(stringResource(R.string.chip_shuffle), stringResource(if (now.shuffle) R.string.on else R.string.off), Modifier.weight(1f)) { c.shuffleModeEnabled = !c.shuffleModeEnabled }
-                Chip(
-                    stringResource(R.string.chip_repeat),
-                    stringResource(when (now.repeat) { Player.REPEAT_MODE_ALL -> R.string.repeat_all; Player.REPEAT_MODE_ONE -> R.string.repeat_one; else -> R.string.off }),
-                    Modifier.weight(1f),
-                ) {
-                    c.repeatMode = when (c.repeatMode) { Player.REPEAT_MODE_OFF -> Player.REPEAT_MODE_ALL; Player.REPEAT_MODE_ALL -> Player.REPEAT_MODE_ONE; else -> Player.REPEAT_MODE_OFF }
-                }
-                Chip(stringResource(R.string.chip_sleep), sleepValue, Modifier.weight(1f)) { sleepSheet = true }
-            }
-            Row(Modifier.fillMaxWidth().floatIn(7)) {
-                Chip(stringResource(R.string.chip_queue), queueValue, Modifier.weight(1f)) { queueSheet = true }
-                Chip(stringResource(R.string.chip_playlist), "+", Modifier.weight(1f)) { playlistSheet = true }
+                IconChip("timer", sleepValue, Modifier.weight(1f)) { sleepSheet = true }
+                IconChip("queue", queueValue, Modifier.weight(1f)) { queueSheet = true }
+                IconChip("list-plus", "", Modifier.weight(1f)) { playlistSheet = true }
                 if (chapters.isNotEmpty()) Chip(stringResource(R.string.chip_chapters), chapterValue, Modifier.weight(1f)) { chapterSheet = true }
-                else Spacer(Modifier.weight(1f))
             }
         }
         Spacer(Modifier.height(6.dp))
@@ -443,6 +445,23 @@ private fun SleepSheet(prefs: Prefs, end: Long?, endOfFile: Boolean, nowMs: Long
 }
 
 /** Kleine Einstellung im Player: Bezeichnung oben, Wert darunter */
+@Composable
+private fun IconChip(icon: String, value: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    Row(modifier.tap(onClick = onClick).padding(vertical = 10.dp, horizontal = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+        PIcon(icon, 22.dp, Dim)
+        if (value.isNotEmpty()) { Spacer(Modifier.width(8.dp)); T(value, size = 15.sp, maxLines = 1) }
+    }
+}
+
+/** Umschalter als Symbol: an = hell mit Punkt darunter, aus = gedimmt (wie in Minimal Library) */
+@Composable
+private fun Toggled(icon: String, on: Boolean, onClick: () -> Unit) {
+    Column(Modifier.tap(onClick = onClick).padding(horizontal = 10.dp, vertical = 6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        PIcon(icon, 26.dp, if (on) Ink else Faint)
+        Box(Modifier.padding(top = 4.dp).size(4.dp).background(if (on) Ink else Color.Transparent, androidx.compose.foundation.shape.CircleShape))
+    }
+}
+
 @Composable
 private fun Chip(label: String, value: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
     Column(modifier.tap(onClick = onClick).padding(vertical = 8.dp, horizontal = 2.dp)) {
