@@ -59,7 +59,7 @@ fun PlaylistsScreen(ui: Actions, now: NowPlaying) {
     val version by Library.version.collectAsState()
     // „Stern“ immer zuerst
     // Bereich PC: nur Playlisten aus Minimal Library, sonst nur die eigenen
-    val pcArea = Prefs.get(androidx.compose.ui.platform.LocalContext.current).section == PC
+    val pcArea = Pc.state.collectAsState().value.paired
     val lists by produceState<List<PlaylistInfo>?>(null, version, pcArea) {
         val star = Library.starPlaylist(false)
         value = withContext(Dispatchers.IO) { Library.dao.playlists() }.filter { Pc.isPcPlaylist(it.uid) == pcArea }.sortedBy { if (it.id == star) 0 else 1 }
@@ -118,7 +118,7 @@ fun PlaylistsScreen(ui: Actions, now: NowPlaying) {
     if (naming) NameInput(stringResource(R.string.new_playlist).removePrefix("+ "), "", onCancel = { naming = false }) { name ->
         naming = false
         scope.launch {
-            val id = if (pcArea) Pc.createPlaylist(name) else Library.createPlaylist(name)
+            val id: Long? = Library.createPlaylist(name, pc = pcArea)
             if (id != null) ui.open(Screen.Playlist(id, name))
         }
     }
@@ -151,7 +151,7 @@ fun PlaylistMenu(ui: Actions, id: Long, name: String, onDeleted: () -> Unit = {}
             Option(stringResource(if (pinned) R.string.pc_offline_off else R.string.pc_offline_on)) { Pc.setPinned(pin, !pinned); onDone() }
         }
         HoldOption(stringResource(R.string.delete)) {
-            Library.bg.launch { Pc.deleteOnPc(id); withContext(Dispatchers.IO) { Library.dao.deletePlaylist(id) }; Library.stars.value++; Library.version.value++ }
+            Library.bg.launch { val pc = Pc.isPcPlaylist(withContext(Dispatchers.IO) { Library.dao.playlist(id)?.uid }); withContext(Dispatchers.IO) { Library.dao.deletePlaylist(id) }; Library.stars.value++; Library.version.value++; if (pc) Pc.changed() }
             onDone(); onDeleted()
         }
         Option(stringResource(R.string.cancel), color = Dim) { onDone() }
@@ -270,7 +270,7 @@ fun AddToPlaylistSheet(load: suspend () -> List<Long>, onDone: () -> Unit) {
         NameInput(stringResource(R.string.new_playlist).removePrefix("+ "), "", onCancel = { naming = false }) { name ->
             naming = false
             scope.launch {
-                val id = if (pcTracks == true) Pc.createPlaylist(name) else Library.createPlaylist(name)
+                val id: Long? = Library.createPlaylist(name, pc = pcTracks == true)
                 if (id != null) ids?.let { Library.setInPlaylist(id, it, true) }
             }
         }

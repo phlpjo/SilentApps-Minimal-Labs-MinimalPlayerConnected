@@ -1,6 +1,9 @@
 package de.philipdecker.playerconnected
 
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -29,7 +32,6 @@ import kotlinx.coroutines.withContext
 @Composable
 fun PcArea(ui: Actions, prefs: Prefs, now: NowPlaying, query: String, version: Int) {
     val st by Pc.state.collectAsState()
-    if (!st.paired) { PcPairing(); return }
     val roots = remember(version, st.loaded) { Pc.roots() }
     if (query.isNotBlank()) { SearchResults(ui, prefs, now, MUSIC, query, version, pc = true); return }
     val single = roots.singleOrNull()
@@ -71,6 +73,7 @@ private fun PcStatusLine(st: Pc.State) {
         )
         if (!st.online && !st.syncing) T(stringResource(R.string.pc_offline_hint), size = 12.sp, color = Faint, maxLines = 2)
         st.error?.let { T(it, size = 12.sp, color = Faint, maxLines = 2) }
+        if (Pc.home() == null) T(stringResource(R.string.pc_home_missing), size = 12.sp, color = Dim, maxLines = 2)
         off?.takeIf { !it.finished || it.error != null }?.let { o ->
             T(o.error ?: stringResource(R.string.pc_offline_progress_fmt, o.done, o.total), size = 12.sp, color = Dim, maxLines = 1)
         }
@@ -79,7 +82,7 @@ private fun PcStatusLine(st: Pc.State) {
 
 /** Noch nicht gekoppelt: Computer im WLAN suchen, Code aus Minimal Library eingeben */
 @Composable
-private fun PcPairing() {
+fun PcPairing() {
     val scope = rememberCoroutineScope()
     var found by remember { mutableStateOf<List<Pc.Found>?>(null) }
     var searching by remember { mutableStateOf(false) }
@@ -135,17 +138,40 @@ fun TransferLine(modifier: Modifier = Modifier) {
     T(text, size = 12.sp, color = Dim, spacing = 0.8.sp, maxLines = 1, align = androidx.compose.ui.text.style.TextAlign.Center, modifier = modifier.fillMaxWidth())
 }
 
-/** Einstellungen: gekoppelter Computer */
+/** Einstellungen: Minimal Library (Computer) – verbinden, Hauptordner, entkoppeln */
 @Composable
-fun PcSettings() {
+fun PcSettings(ui: Actions) {
     val st by Pc.state.collectAsState()
+    val version by Library.version.collectAsState()
     Section(stringResource(R.string.pc_section))
     if (!st.paired) {
         T(stringResource(R.string.pc_settings_none), size = 15.sp, color = Dim)
+        Option(stringResource(R.string.pc_connect)) { ui.open(Screen.Pair) }
         return
     }
     T(st.name, size = 18.sp, maxLines = 1)
     T(stringResource(if (st.online) R.string.pc_online else R.string.pc_offline), size = 13.sp, color = Faint)
+    val homeName = remember(version, st) {
+        Pc.home()?.let { h ->
+            try { android.provider.DocumentsContract.getTreeDocumentId(android.net.Uri.parse(h)).substringAfterLast(':').ifEmpty { "/" } } catch (_: Exception) { h }
+        }
+    }
+    Toggle(stringResource(R.string.pc_home), homeName ?: stringResource(R.string.pc_home_none)) { ui.pickHome() }
+    T(stringResource(R.string.pc_home_note), size = 12.sp, color = Faint)
     Option(stringResource(R.string.pc_refresh), color = Dim) { Library.bg.launch { Pc.refresh() } }
     HoldOption(stringResource(R.string.pc_unpair)) { Library.bg.launch { Pc.unpair() } }
+}
+
+/** Eigener Bildschirm zum Koppeln */
+@Composable
+fun PairScreen(ui: Actions) {
+    val st by Pc.state.collectAsState()
+    androidx.compose.runtime.LaunchedEffect(st.paired) { if (st.paired) ui.back() }
+    Column(
+        Modifier.fillMaxSize().windowInsetsPadding(androidx.compose.foundation.layout.WindowInsets.systemBars).padding(horizontal = 32.dp, vertical = 24.dp),
+    ) {
+        T(stringResource(R.string.pc_connect), size = 30.sp, weight = FontWeight.Light, glow = true, modifier = Modifier.floatIn(0))
+        Box(Modifier.weight(1f)) { PcPairing() }
+        T(stringResource(R.string.back), size = 15.sp, color = Faint, modifier = Modifier.align(Alignment.CenterHorizontally).tap { ui.back() }.padding(12.dp))
+    }
 }

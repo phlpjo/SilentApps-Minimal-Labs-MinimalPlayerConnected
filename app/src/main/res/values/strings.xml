@@ -193,7 +193,6 @@
     <string name="pc_offline_on">Make available offline</string>
     <string name="pc_offline_off">Remove offline copy</string>
     <string name="pc_section">Computer (Minimal Library)</string>
-    <string name="pc_settings_none">Not paired. Open “PC” at the top to pair.</string>
     <string name="pc_refresh">Reload library</string>
     <string name="pc_unpair">Unpair</string>
     <string name="export_usb">Export to USB stick</string>
@@ -210,4 +209,10 @@
     <string name="pc_offline_mark">offline</string>
     <string name="pc_upload_fmt">To PC: %1$d of %2$d</string>
     <string name="no_lyrics">No lyrics. Minimal Library can fetch or add them (saved as .lrc next to the song).</string>
+    <string name="pc_connect">Connect to Minimal Library</string>
+    <string name="pc_home">Main folder on this phone</string>
+    <string name="pc_home_none">choose</string>
+    <string name="pc_home_note">All music on this phone lives here, arranged like your library. New music you put in here is sent to the computer; what you sort there moves here too.</string>
+    <string name="pc_home_missing">Choose a main folder (Settings) – new music from it goes to the computer, offline copies land there.</string>
+    <string name="pc_settings_none">Not connected. With Minimal Library on your computer, “Music” shows your whole library.</string>
 </resources>

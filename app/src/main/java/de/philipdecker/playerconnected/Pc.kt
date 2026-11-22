@@ -110,7 +110,7 @@ object Pc {
     fun realUri(uri: Uri): Uri {
         if (uri.scheme != SCHEME) return uri
         val tid = trackIdOf(uri.toString())
-        if (tid != null) local[tid]?.let { return Uri.parse(it) }
+        if (tid != null) docs[tid]?.let { return Uri.parse(it) }
         return httpUrl(uri.toString())?.let { Uri.parse(it) } ?: uri
     }
 
@@ -192,8 +192,8 @@ object Pc {
                         else if (st == 200) {
                             val v = JSONObject(body).optString("version")
                             state.value = state.value.copy(online = true, error = null)
-                            if (v != sp().getString("version", null)) refresh()
-                            syncUp() // selbst gedrosselt (alle 5 Minuten)
+                            if (v != sp().getString("version", null) || dirty) refresh()
+                            else syncHomeThrottled()
                             true
                         } else false
                     } catch (_: Exception) { false }
@@ -278,24 +278,8 @@ object Pc {
                 // weggefallene Musikordner am PC
                 Library.dao.knownRoots().filter { isPcRoot(it) && (!it.startsWith("pc:$pc:") || (it.substringAfterLast(':').toIntOrNull() ?: 0) >= names.size) }
                     .forEach { Library.dao.drop(it) }
-                // Playlisten
-                val pls = o.getJSONArray("playlists")
-                val keep = HashSet<String>()
-                val smart = HashSet<String>()
-                for (i in 0 until pls.length()) {
-                    val p = pls.getJSONObject(i)
-                    val uid = "pc-$pc-${p.getLong("id")}"
-                    keep += uid
-                    if (p.optBoolean("smart")) smart += uid
-                    val items = p.getJSONArray("items")
-                    val ids = (0 until items.length()).mapNotNull { k -> uriById[items.getLong(k)]?.let { Library.dao.byUri(it)?.id } }
-                    val existing = Library.dao.playlistByUid(uid)
-                    val name = p.getString("name")
-                    val lid = existing?.id ?: Library.dao.insertPlaylist(Playlist(name = name, created = System.currentTimeMillis(), uid = uid))
-                    if (existing != null && existing.name != name) Library.dao.renamePlaylist(lid, name)
-                    Library.dao.replaceItems(lid, ids)
-                }
-                Library.dao.allPlaylists().filter { it.uid.startsWith("pc-") && it.uid !in keep }.forEach { Library.dao.deletePlaylist(it.id) }
+                // Playlisten und Stern: echte Zusammenführung (Handy ↔ PC)
+                val smart = mergePlaylists(o.getJSONArray("playlists"), uriById, o.optLong("star", 0L))
                 sp().edit()
                     .putString("roots", JSONArray(names).toString())
                     .putString("name", o.optString("name", state.value.name))
@@ -305,7 +289,7 @@ object Pc {
                 state.value = state.value.copy(name = o.optString("name", state.value.name), loaded = true, online = true, error = null)
                 Library.version.value++
                 scope.launch { fetchCovers() }
-                scope.launch { syncOffline(); syncUp() }
+                scope.launch { syncHome() }
             } catch (e: Exception) {
                 state.value = state.value.copy(error = e.message)
             } finally {
@@ -338,66 +322,233 @@ object Pc {
         if (any) Library.version.value++
     }
 
-    // ───────── Änderungen zurück an den PC ─────────
+    // ───────── Playlisten & Stern: Zusammenführung Handy ↔ PC ─────────
+    // Für jede Playlist merkt sich die App den zuletzt gemeinsamen Stand („Basis“). Beim Abgleich:
+    // nur PC geändert → übernehmen · nur Handy geändert → an PC schicken · beide → zusammenführen
+    // (Hinzugefügtes von beiden Seiten bleibt, Entferntes von beiden Seiten fällt weg, Reihenfolge vom PC).
 
-    private fun pcPlaylistId(uid: String) = if (uid.startsWith("pc-")) uid.substringAfterLast('-').toLongOrNull() else null
+    private data class Pl(val name: String, val items: List<Long>)
 
-    fun isPcPlaylist(uid: String?) = uid?.startsWith("pc-") == true
-    fun isSmart(uid: String?) = uid != null && ::app.isInitialized && (sp().getStringSet("smart", emptySet()) ?: emptySet()).contains(uid)
+    private val base = HashMap<String, Pl>()
+    private fun baseFile() = File(app.filesDir, "pc-base.json")
+    @Volatile private var dirty = false
 
-    /** Name und Inhalt einer PC-Playlist an Minimal Library schicken (nach jeder Änderung am Handy) */
-    fun push(localId: Long) {
-        scope.launch {
-            val p = Library.dao.playlist(localId) ?: return@launch
-            val pid = pcPlaylistId(p.uid) ?: return@launch
-            try {
-                val ids = Library.playlistTracks(localId).mapNotNull { trackIdOf(it.track.uri) }
-                val body = JSONObject().put("name", p.name).apply { if (!isSmart(p.uid)) put("items", JSONArray(ids)) }
-                api("POST", "/pl/$pid", body.toString())
-                sp().edit().remove("version").apply() // beim nächsten Abgleich frisch laden
-            } catch (e: Exception) {
-                state.value = state.value.copy(error = e.message)
-                refresh() // Stand vom PC wiederherstellen
+    private fun loadBase() {
+        if (base.isNotEmpty()) return
+        try {
+            val o = JSONObject(baseFile().readText())
+            o.keys().forEach { k ->
+                val p = o.getJSONObject(k)
+                val a = p.getJSONArray("items")
+                base[k] = Pl(p.getString("name"), (0 until a.length()).map { a.getLong(it) })
             }
-        }
-    }
-
-    /** PC-Playlist löschen (vor dem lokalen Löschen aufrufen) */
-    suspend fun deleteOnPc(localId: Long) = withContext(Dispatchers.IO) {
-        val p = Library.dao.playlist(localId) ?: return@withContext
-        val pid = pcPlaylistId(p.uid) ?: return@withContext
-        try { api("DELETE", "/pl/$pid") } catch (e: Exception) { state.value = state.value.copy(error = e.message) }
-    }
-
-    /** Neue Playlist am PC anlegen → lokale ID */
-    suspend fun createPlaylist(name: String): Long? = withContext(Dispatchers.IO) {
-        try {
-            val o = JSONObject(api("POST", "/pl", JSONObject().put("name", name.trim()).toString()))
-            val uid = "pc-$id-${o.getLong("id")}"
-            val lid = Library.dao.insertPlaylist(Playlist(name = name.trim(), created = System.currentTimeMillis(), uid = uid))
-            Library.version.value++
-            lid
-        } catch (e: Exception) { state.value = state.value.copy(error = e.message); null }
-    }
-
-    // ───────── Offline verfügbar ─────────
-    // Gemerkte Auswahl („d|<Wurzel>|<Pfad>“ für Ordner, „l|<uid>“ für Playlisten) und welche PC-Titel als Datei vorliegen.
-
-    private val local = HashMap<Long, String>()
-    private fun offlineFile() = File(app.filesDir, "pc-offline.json")
-
-    private fun loadOffline() {
-        try {
-            val o = JSONObject(offlineFile().readText())
-            o.keys().forEach { k -> k.toLongOrNull()?.let { local[it] = o.getString(k) } }
         } catch (_: Exception) { }
     }
 
-    private fun saveOffline() {
-        try { offlineFile().writeText(JSONObject(local.mapKeys { it.key.toString() } as Map<*, *>).toString()) } catch (_: Exception) { }
+    private fun saveBase() {
+        try {
+            val o = JSONObject()
+            base.forEach { (k, v) -> o.put(k, JSONObject().put("name", v.name).put("items", JSONArray(v.items))) }
+            baseFile().writeText(o.toString())
+        } catch (_: Exception) { }
     }
 
-    /** „Wurzel|Ordner“ (inkl. übergeordneter Ordner), in denen offline gespeicherte Titel liegen */
+    /** Drei-Wege-Zusammenführung einer Titelliste */
+    private fun merge3(b: List<Long>, l: List<Long>, s: List<Long>): List<Long> {
+        if (l == b) return s
+        if (s == b) return l
+        val removed = b.toSet() - l.toSet() + (b.toSet() - s.toSet())
+        val result = s.filter { it !in removed }.toMutableList()
+        val added = l.filter { it !in b.toSet() }
+        for (x in added) {
+            if (x in result) continue
+            val i = l.indexOf(x)
+            var prev = i - 1
+            while (prev >= 0 && l[prev] !in result) prev--
+            result.add(if (prev < 0) 0 else result.indexOf(l[prev]) + 1, x)
+        }
+        return result
+    }
+
+    private fun pcPlaylistId(uid: String) = if (uid.startsWith("pc-")) uid.substringAfterLast('-').toLongOrNull() else null
+
+    /** Playlist der Bibliothek am PC (oder am Handy neu angelegt, noch nicht übertragen) */
+    fun isPcPlaylist(uid: String?) = uid != null && (uid.startsWith("pc-") || uid.startsWith("pcnew-"))
+    fun isSmart(uid: String?) = uid != null && ::app.isInitialized && (sp().getStringSet("smart", emptySet()) ?: emptySet()).contains(uid)
+
+    /** Etwas an Playlisten/Stern geändert → beim nächsten Kontakt (sofort, wenn verbunden) abgleichen */
+    fun changed() {
+        dirty = true
+        if (state.value.online) scope.launch { refresh() }
+    }
+
+    private suspend fun localItems(lid: Long): List<Long> = Library.playlistTracks(lid).mapNotNull { trackIdOf(it.track.uri) }
+
+    private suspend fun setLocal(lid: Long, p: Pl, uriById: Map<Long, String>) {
+        val ids = p.items.mapNotNull { uriById[it]?.let { u -> Library.dao.byUri(u)?.id } }
+        val cur = Library.dao.playlist(lid)
+        if (cur != null && cur.name != p.name) Library.dao.renamePlaylist(lid, p.name)
+        Library.dao.replaceItems(lid, ids)
+    }
+
+    /** → Menge der smarten Playlisten (uids) */
+    private suspend fun mergePlaylists(pls: JSONArray, uriById: Map<Long, String>, starId: Long): Set<String> {
+        loadBase()
+        dirty = false
+        val pc = id
+        val smart = HashSet<String>()
+        val server = LinkedHashMap<String, Pl>()
+        for (i in 0 until pls.length()) {
+            val p = pls.getJSONObject(i)
+            val uid = "pc-$pc-${p.getLong("id")}"
+            if (p.optBoolean("smart")) smart += uid
+            val a = p.getJSONArray("items")
+            server[uid] = Pl(p.getString("name"), (0 until a.length()).map { a.getLong(it) })
+        }
+        val starUid = if (starId > 0) "pc-$pc-$starId" else null
+        val locals = Library.dao.allPlaylists().filter { it.uid.startsWith("pc-$pc-") }.associateBy { it.uid }
+        for ((uid, sv) in server) {
+            val loc = locals[uid]
+            val b = base[uid]
+            if (loc == null) {
+                if (b != null && sv == b && uid !in smart && uid != starUid) {
+                    // am Handy gelöscht, am PC unverändert → auch am PC löschen
+                    try { api("DELETE", "/pl/${pcPlaylistId(uid)}") } catch (_: Exception) { }
+                    base.remove(uid)
+                    continue
+                }
+                val lid = Library.dao.insertPlaylist(Playlist(name = sv.name, created = System.currentTimeMillis(), uid = uid))
+                setLocal(lid, sv, uriById)
+                base[uid] = sv
+                continue
+            }
+            val lv = Pl(loc.name, localItems(loc.id))
+            val bv = b ?: sv // noch nie abgeglichen: PC-Stand als Basis
+            val merged = if (uid in smart) Pl(lv.name.takeIf { it != bv.name } ?: sv.name, sv.items)
+            else Pl(if (lv.name != bv.name) lv.name else sv.name, merge3(bv.items, lv.items, sv.items))
+            if (merged != sv) {
+                try {
+                    val body = JSONObject().put("name", merged.name).apply { if (uid !in smart) put("items", JSONArray(merged.items)) }
+                    api("POST", "/pl/${pcPlaylistId(uid)}", body.toString())
+                } catch (_: Exception) { }
+            }
+            if (merged != lv) setLocal(loc.id, merged, uriById)
+            base[uid] = merged
+        }
+        // am PC gelöscht
+        for ((uid, loc) in locals) {
+            if (uid in server) continue
+            val b = base.remove(uid)
+            val lv = Pl(loc.name, localItems(loc.id))
+            if (b != null && lv != b) {
+                // am Handy inzwischen geändert → am PC neu anlegen statt verlieren
+                try {
+                    val o = JSONObject(api("POST", "/pl", JSONObject().put("name", lv.name).put("items", JSONArray(lv.items)).toString()))
+                    val nuid = "pc-$pc-${o.getLong("id")}"
+                    Library.dao.deletePlaylist(loc.id)
+                    val lid = Library.dao.insertPlaylist(Playlist(name = lv.name, created = System.currentTimeMillis(), uid = nuid))
+                    setLocal(lid, lv, uriById)
+                    base[nuid] = lv
+                } catch (_: Exception) { }
+            } else Library.dao.deletePlaylist(loc.id)
+        }
+        // am Handy neu angelegt (auch ohne Verbindung)
+        for (loc in Library.dao.allPlaylists().filter { it.uid.startsWith("pcnew-") }) {
+            val lv = Pl(loc.name, localItems(loc.id))
+            try {
+                val o = JSONObject(api("POST", "/pl", JSONObject().put("name", lv.name).put("items", JSONArray(lv.items)).toString()))
+                val nuid = "pc-$pc-${o.getLong("id")}"
+                Library.dao.deletePlaylist(loc.id)
+                val lid = Library.dao.insertPlaylist(Playlist(name = lv.name, created = System.currentTimeMillis(), uid = nuid))
+                setLocal(lid, lv, uriById)
+                base[nuid] = lv
+            } catch (_: Exception) { }
+        }
+        saveBase()
+        // Stern = Stern der Bibliothek
+        if (starUid != null) Library.dao.playlistByUid(starUid)?.let { Prefs.get(app).starId = it.id; Library.stars.value++ }
+        migrateLegacy(uriById)
+        return smart
+    }
+
+    /** Einmalig: bisherige Handy-Playlisten und Sterne in die Bibliothek übernehmen */
+    private suspend fun migrateLegacy(uriById: Map<Long, String>) {
+        if (sp().getBoolean("migrated", false)) return
+        val legacy = Library.dao.allPlaylists().filter { !isPcPlaylist(it.uid) && !it.uid.startsWith("off-") }
+        val star = Prefs.get(app).starId
+        val uriToPc = uriById.entries.associate { it.value to it.key }
+        for (p in legacy) {
+            val tracks = Library.playlistTracks(p.id).map { it.track }
+            // PC-Titel direkt; Handy-Titel über Dateiname + Größe / Interpret + Titel suchen
+            val ids = ArrayList<Long>()
+            val unknown = tracks.filter { uriToPc[it.uri] == null }
+            val found = HashMap<String, Long>()
+            try {
+                for (chunk in unknown.chunked(300)) {
+                    val arr = JSONArray()
+                    chunk.forEach { t -> arr.put(JSONObject().put("k", t.uri).put("name", t.name).put("size", t.size).put("title", t.tagTitle).put("artist", t.tagArtist).put("ms", t.duration.coerceAtLeast(0))) }
+                    val o = JSONObject(api("POST", "/have", arr.toString()))
+                    o.optJSONObject("found")?.let { f -> f.keys().forEach { k -> found[k] = f.getLong(k) } }
+                }
+            } catch (_: Exception) { return } // ohne Verbindung später erneut
+            for (t in tracks) (uriToPc[t.uri] ?: found[t.uri])?.let { ids += it }
+            if (p.id == star) {
+                val s = Library.dao.allPlaylists().firstOrNull { it.uid.startsWith("pc-") && Prefs.get(app).starId == it.id }
+                if (s != null) {
+                    val cur = localItems(s.id)
+                    setLocal(s.id, Pl(s.name, cur + ids.filter { it !in cur }), uriById)
+                    dirty = true
+                }
+            } else {
+                val lid = Library.dao.insertPlaylist(Playlist(name = p.name, created = System.currentTimeMillis(), uid = "pcnew-" + java.util.UUID.randomUUID().toString().take(8)))
+                setLocal(lid, Pl(p.name, ids), uriById)
+                dirty = true
+            }
+            Library.dao.deletePlaylist(p.id)
+        }
+        sp().edit().putBoolean("migrated", true).apply()
+        Library.version.value++
+    }
+
+    // ───────── Hauptordner auf dem Handy ─────────
+    // Alle Dateien am Handy liegen im Hauptordner, aufgebaut wie die Bibliothek: <Musikquelle>/<Ordner>/<Datei>.
+    // Neu hineingelegte Musik wird hochgeladen; was am PC umsortiert wird, zieht am Handy mit;
+    // „offline verfügbar“ lädt dorthin; am PC Gelöschtes verschwindet auch hier.
+
+    private val files = HashMap<Long, String>()   // PC-Titel → Pfad im Hauptordner
+    private val docs = HashMap<Long, String>()    // PC-Titel → Dokument-Adresse (zum Abspielen)
+    private val own = HashSet<Long>()             // vom Handy gekommen → bleibt immer offline
+    private fun homeFile() = File(app.filesDir, "pc-home.json")
+
+    fun home(): String? = if (::app.isInitialized) sp().getString("home", null) else null
+
+    fun setHome(uri: String) {
+        sp().edit().putString("home", uri).apply()
+        files.clear(); docs.clear(); saveHomeMap()
+        state.value = state.value.copy()
+        Library.version.value++
+        scope.launch { syncHome(force = true) }
+    }
+
+    private fun loadOffline() {
+        try {
+            val o = JSONObject(homeFile().readText())
+            o.optJSONObject("files")?.let { f -> f.keys().forEach { k -> k.toLongOrNull()?.let { files[it] = f.getJSONArray(k).getString(0); docs[it] = f.getJSONArray(k).getString(1) } } }
+            o.optJSONArray("own")?.let { a -> for (i in 0 until a.length()) own += a.getLong(i) }
+        } catch (_: Exception) { }
+        // frühere Ablage im App-Speicher aufräumen
+        try { File(app.getExternalFilesDir(null) ?: app.filesDir, "offline").deleteRecursively(); File(app.filesDir, "pc-offline.json").delete() } catch (_: Exception) { }
+    }
+
+    private fun saveHomeMap() {
+        try {
+            val f = JSONObject()
+            files.forEach { (k, v) -> f.put(k.toString(), JSONArray().put(v).put(docs[k] ?: "")) }
+            homeFile().writeText(JSONObject().put("files", f).put("own", JSONArray(own.toList())).toString())
+        } catch (_: Exception) { }
+    }
+
+    /** „Wurzel|Ordner“ (inkl. übergeordneter Ordner), in denen Titel auf dem Handy liegen */
     suspend fun offlineDirs(): Set<String> = withContext(Dispatchers.IO) {
         val out = HashSet<String>()
         for (r in roots()) for (t in Library.dao.tracksOfRoot(r.uri)) {
@@ -408,7 +559,7 @@ object Pc {
         out
     }
 
-    fun isOffline(uri: String) = trackIdOf(uri)?.let { local.containsKey(it) } == true
+    fun isOffline(uri: String) = trackIdOf(uri)?.let { docs.containsKey(it) } == true
 
     private fun pins(): Set<String> = sp().getStringSet("pins", emptySet()) ?: emptySet()
     fun isPinned(key: String) = key in pins()
@@ -420,149 +571,150 @@ object Pc {
         if (on) s += key else s -= key
         sp().edit().putStringSet("pins", s).apply()
         Library.version.value++
-        scope.launch { syncOffline() }
+        scope.launch { syncHome(force = true) }
     }
-
-    /** Offline-Kopien liegen im eigenen Speicher der App (nur Bereich PC; weg bei Deinstallation) */
-    private fun offlineDir() = File(app.getExternalFilesDir(null) ?: app.filesDir, "offline").apply { mkdirs() }
-
-    /** Ausgewählte Ordner/Playlisten herunterladen, nicht mehr benötigte Kopien löschen */
-    suspend fun syncOffline() = offlineLock.withLock {
-        val pinned = pins()
-        if (pinned.isEmpty() && local.isEmpty()) return@withLock
-        val want = LinkedHashMap<Long, Track>()
-        for (k in pinned) {
-            when {
-                k.startsWith("d|") -> {
-                    val root = k.removePrefix("d|").substringBefore('|')
-                    val path = k.removePrefix("d|$root|")
-                    Library.dao.subtree(root, path).forEach { t -> trackIdOf(t.uri)?.let { want[it] = t } }
-                }
-                k.startsWith("l|") -> {
-                    val p = Library.dao.playlistByUid(k.removePrefix("l|")) ?: continue
-                    Library.playlistTracks(p.id).forEach { pt -> trackIdOf(pt.track.uri)?.let { want[it] = pt.track } }
-                }
-            }
-        }
-        // Bibliothek noch nicht geladen → nichts löschen
-        if (want.isEmpty() && pinned.isNotEmpty() && !state.value.loaded) return@withLock
-        val dir = offlineDir()
-        val todo = want.filter { (tid, _) -> local[tid]?.let { File(Uri.parse(it).path ?: "").exists() } != true }
-        var done = 0
-        var failed = 0
-        offline.value = OfflineStatus(0, todo.size, null, todo.isEmpty())
-        for ((tid, t) in todo) {
-            val url = httpUrl(t.uri)
-            if (url == null || !state.value.online) { failed++; continue }
-            offline.value = OfflineStatus(done, todo.size, Library.label(t), false)
-            try {
-                val c = URL(url).openConnection() as HttpURLConnection
-                c.connectTimeout = 5000; c.readTimeout = 60_000
-                try {
-                    if (c.responseCode != 200) throw IllegalStateException("${c.responseCode}")
-                    val f = File(dir, tid.toString() + "." + t.uri.substringAfterLast('.', "mp3"))
-                    val tmp = File(dir, f.name + ".part")
-                    c.inputStream.use { inp -> tmp.outputStream().use { inp.copyTo(it, 256 * 1024) } }
-                    if (!tmp.renameTo(f)) throw IllegalStateException("speichern")
-                    local[tid] = Uri.fromFile(f).toString()
-                    // Songtext gleich mitnehmen
-                    try {
-                        val (st, body) = request("GET", "http://$addr/l/$tid", timeout = 4000)
-                        if (st == 200 && body.isNotBlank()) File(dir, "$tid.lrc").writeText(body)
-                    } catch (_: Exception) { }
-                } finally { c.disconnect() }
-            } catch (_: Exception) { failed++ }
-            done++
-            if (done % 10 == 0) saveOffline()
-        }
-        // nicht mehr gewünschte Kopien löschen
-        for (tid in local.keys.filter { it !in want.keys }) {
-            local.remove(tid)?.let { u -> try { File(Uri.parse(u).path ?: "").delete(); File(dir, "$tid.lrc").delete() } catch (_: Exception) { } }
-        }
-        saveOffline()
-        Library.version.value++
-        offline.value = OfflineStatus(done, todo.size, null, true, if (failed > 0) app.getString(R.string.pc_errors_fmt, failed) else null)
-    }
-
-    // ───────── Handy → PC: Musik, die am PC fehlt, hochladen; eigene Playlisten übertragen ─────────
 
     data class UpStatus(val done: Int, val total: Int, val finished: Boolean)
     val upload = MutableStateFlow<UpStatus?>(null)
-    private val upLock = Mutex()
-    private var lastUp = 0L
-    private val upMap = HashMap<String, Long>() // Handy-Adresse → Titel-ID am PC
-    private fun upFile() = File(app.filesDir, "pc-up.json")
+    private var lastHome = 0L
 
-    private fun loadUp() {
-        if (upMap.isNotEmpty()) return
-        try { val o = JSONObject(upFile().readText()); o.keys().forEach { k -> upMap[k] = o.getLong(k) } } catch (_: Exception) { }
+    private suspend fun syncHomeThrottled() {
+        if (System.currentTimeMillis() - lastHome > 60_000L) syncHome()
     }
 
-    private fun saveUp() { try { upFile().writeText(JSONObject(upMap as Map<*, *>).toString()) } catch (_: Exception) { } }
+    private fun clean(s: String) = s.replace(Regex("[\\\\/:*?\"<>|]"), "_").trim().ifEmpty { "_" }
 
-    /** Nach dem Abgleich (höchstens alle paar Minuten): fehlende Titel hochladen, Playlisten schicken */
-    suspend fun syncUp(force: Boolean = false) = upLock.withLock {
-        if (token.isEmpty() || !state.value.online) return@withLock
-        if (!force && System.currentTimeMillis() - lastUp < 5 * 60_000L) return@withLock
-        lastUp = System.currentTimeMillis()
-        loadUp()
-        val prefs = Prefs.get(app)
-        val roots = prefs.roots(MUSIC)
-        val tracks = roots.flatMap { r -> Library.dao.tracksOfRoot(r.uri).map { it to r.name } }
-        val byUri = tracks.associateBy { it.first.uri }
-        // 1. Was kennt der PC schon? (Dateiname + Größe oder Interpret + Titel)
-        val unknown = tracks.filter { it.first.uri !in upMap }
-        val missing = ArrayList<Pair<Track, String>>()
-        try {
-            for (chunk in unknown.chunked(300)) {
-                val arr = JSONArray()
-                chunk.forEach { (t, _) ->
-                    arr.put(JSONObject().put("k", t.uri).put("name", t.name).put("size", t.size)
-                        .put("title", t.tagTitle).put("artist", t.tagArtist).put("ms", t.duration.coerceAtLeast(0)))
+    /** Wo ein PC-Titel im Hauptordner liegen soll */
+    private fun expectedRel(t: Track, names: Map<String, String>): String =
+        (listOf(clean(names[t.root] ?: "Musik")) + t.dir.split('/').filter { it.isNotEmpty() }.map(::clean) + clean(t.name)).joinToString("/")
+
+    suspend fun syncHome(force: Boolean = false) = offlineLock.withLock {
+        val homeUri = home()?.let { Uri.parse(it) } ?: return@withLock
+        if (token.isEmpty() || (!force && !state.value.online)) return@withLock
+        lastHome = System.currentTimeMillis()
+        val ctx = app
+        val names = roots().associate { it.uri to it.name }
+        // PC-Titel nach ID
+        val pcTracks = HashMap<Long, Track>()
+        for (r in roots()) for (t in Library.dao.tracksOfRoot(r.uri)) trackIdOf(t.uri)?.let { pcTracks[it] = t }
+        if (pcTracks.isEmpty() && !state.value.loaded) return@withLock
+        val local = try { Saf.list(ctx, homeUri) } catch (_: Exception) { return@withLock }
+        val audio = local.filter { !it.dir && Library.isAudio(it.name, it.mime) && !it.name.endsWith(".part") }
+        val relToId = files.entries.associate { it.value.lowercase() to it.key }
+        val present = HashSet<Long>()
+        var changed = false
+        // 1. Bekannte Dateien: am PC gelöscht → weg; umsortiert → mitziehen
+        val unknown = ArrayList<Saf.Entry>()
+        for (f in audio) {
+            val tid = relToId[f.rel.lowercase()]
+            if (tid == null) { unknown += f; continue }
+            val t = pcTracks[tid]
+            if (t == null) {
+                if (state.value.online && state.value.loaded) {
+                    Saf.delete(ctx, homeUri, f.rel); Saf.delete(ctx, homeUri, lrcOf(f.rel))
+                    files.remove(tid); docs.remove(tid); own.remove(tid); changed = true
                 }
-                val o = JSONObject(api("POST", "/have", arr.toString()))
-                o.optJSONObject("found")?.let { f -> f.keys().forEach { k -> upMap[k] = f.getLong(k) } }
-                val m = o.optJSONArray("missing") ?: JSONArray()
-                for (i in 0 until m.length()) byUri[m.getString(i)]?.let { missing += it }
+                continue
             }
-            saveUp()
-            // 2. Fehlende hochladen
+            present += tid
+            val want = expectedRel(t, names)
+            if (!want.equals(f.rel, ignoreCase = false)) {
+                try {
+                    docs[tid] = Saf.move(ctx, homeUri, f.rel, want)
+                    files[tid] = want
+                    try { Saf.move(ctx, homeUri, lrcOf(f.rel), lrcOf(want)) } catch (_: Exception) { }
+                    changed = true
+                } catch (_: Exception) { docs[tid] = f.uri }
+            } else docs[tid] = f.uri
+        }
+        // 2. Neue Dateien: am PC vorhanden? sonst hochladen (→ eigene Musikquelle „<Gerät>“ am PC)
+        if (unknown.isNotEmpty() && state.value.online) {
+            val found = HashMap<String, Long>()
+            val missing = ArrayList<Saf.Entry>()
+            try {
+                for (chunk in unknown.chunked(300)) {
+                    val arr = JSONArray()
+                    chunk.forEach { f -> arr.put(JSONObject().put("k", f.rel).put("name", f.name).put("size", f.size)) }
+                    val o = JSONObject(api("POST", "/have", arr.toString()))
+                    o.optJSONObject("found")?.let { m -> m.keys().forEach { k -> found[k] = m.getLong(k) } }
+                    val m = o.optJSONArray("missing") ?: JSONArray()
+                    for (i in 0 until m.length()) chunk.firstOrNull { it.rel == m.getString(i) }?.let { missing += it }
+                }
+            } catch (_: Exception) { }
+            for (f in unknown) found[f.rel]?.let { tid -> files[tid] = f.rel; docs[tid] = f.uri; own += tid; present += tid; changed = true }
             if (missing.isNotEmpty()) {
                 upload.value = UpStatus(0, missing.size, false)
                 var n = 0
-                for ((t, rootName) in missing) {
+                for (f in missing) {
                     if (!state.value.online) break
                     try {
-                        val rel = listOf(rootName, t.dir, t.name).filter { it.isNotEmpty() }.joinToString("/")
-                        val id = uploadFile(t, rel)
-                        if (id != null) upMap[t.uri] = id
+                        uploadFile(f.uri, f.size, f.rel)?.let { tid -> files[tid] = f.rel; docs[tid] = f.uri; own += tid; present += tid; changed = true }
                     } catch (_: Exception) { }
                     n++
                     upload.value = UpStatus(n, missing.size, false)
-                    if (n % 10 == 0) saveUp()
+                    if (n % 10 == 0) saveHomeMap()
                 }
-                saveUp()
                 upload.value = UpStatus(n, missing.size, true)
+                dirty = true // neue Titel → beim nächsten Abgleich an ihren Platz ziehen
             }
-            // 3. Eigene Playlisten (nicht die vom PC)
-            val pls = JSONArray()
-            for (p in Library.dao.allPlaylists().filter { !isPcPlaylist(it.uid) }) {
-                val ids = Library.playlistTracks(p.id).mapNotNull { upMap[it.track.uri] }
-                pls.put(JSONObject().put("uid", "phone-${phoneId()}-${p.uid}").put("name", p.name).put("items", JSONArray(ids)).put("star", p.id == prefs.starId))
-            }
-            api("POST", "/plsync", JSONObject().put("prefix", "phone-${phoneId()}-").put("playlists", pls).toString())
-        } catch (e: Exception) {
-            state.value = state.value.copy(error = e.message)
         }
+        // 3. Gewünscht: offline markierte Ordner/Playlisten + alles, was vom Handy kam
+        val want = HashMap<Long, Track>()
+        for (k in pins()) when {
+            k.startsWith("d|") -> {
+                val root = k.removePrefix("d|").substringBefore('|')
+                val path = k.removePrefix("d|$root|")
+                Library.dao.subtree(root, path).forEach { t -> trackIdOf(t.uri)?.let { want[it] = t } }
+            }
+            k.startsWith("l|") -> Library.dao.playlistByUid(k.removePrefix("l|"))?.let { p -> Library.playlistTracks(p.id).forEach { pt -> trackIdOf(pt.track.uri)?.let { want[it] = pt.track } } }
+        }
+        for (tid in own) pcTracks[tid]?.let { want[tid] = it }
+        // 4. Fehlende herunterladen
+        val todo = want.filter { (tid, _) -> tid !in present }
+        var done = 0
+        var failed = 0
+        if (state.value.online) {
+            offline.value = OfflineStatus(0, todo.size, null, todo.isEmpty())
+            for ((tid, t) in todo) {
+                val url = httpUrl(t.uri) ?: break
+                offline.value = OfflineStatus(done, todo.size, Library.label(t), false)
+                try {
+                    val rel = expectedRel(t, names)
+                    val c = URL(url).openConnection() as HttpURLConnection
+                    c.connectTimeout = 5000; c.readTimeout = 60_000
+                    try {
+                        if (c.responseCode != 200) throw IllegalStateException("${c.responseCode}")
+                        docs[tid] = c.inputStream.use { Saf.saveFile(ctx, homeUri, rel, it) }
+                        files[tid] = rel
+                        changed = true
+                    } finally { c.disconnect() }
+                    try {
+                        val (st, body) = request("GET", "http://$addr/l/$tid", timeout = 4000)
+                        if (st == 200 && body.isNotBlank()) Saf.saveFile(ctx, homeUri, lrcOf(rel), body.byteInputStream())
+                    } catch (_: Exception) { }
+                } catch (_: Exception) { failed++ }
+                done++
+                if (done % 10 == 0) saveHomeMap()
+            }
+        }
+        // 5. Nicht mehr gewünschte Kopien entfernen (nur vom PC geholte; Eigenes bleibt)
+        for (tid in files.keys.toList()) {
+            if (tid in want || tid in own) continue
+            files[tid]?.let { rel -> Saf.delete(ctx, homeUri, rel); Saf.delete(ctx, homeUri, lrcOf(rel)) }
+            files.remove(tid); docs.remove(tid); changed = true
+        }
+        // Verwaiste Zuordnungen (Datei von Hand gelöscht)
+        for (tid in files.keys.toList()) if (tid !in present && tid !in todo.keys) { files.remove(tid); docs.remove(tid); own.remove(tid); changed = true }
+        if (changed) Saf.removeEmptyDirs(ctx, homeUri)
+        saveHomeMap()
+        offline.value = OfflineStatus(done, todo.size, null, true, if (failed > 0) app.getString(R.string.pc_errors_fmt, failed) else null)
+        if (changed) Library.version.value++
     }
 
-    private fun phoneId(): String {
-        val p = sp()
-        return p.getString("phone", null) ?: java.util.UUID.randomUUID().toString().take(8).also { p.edit().putString("phone", it).apply() }
-    }
+    private fun lrcOf(rel: String) = rel.substringBeforeLast('.') + ".lrc"
 
     /** Eine Datei an Minimal Library schicken → Titel-ID am PC */
-    private fun uploadFile(t: Track, rel: String): Long? {
+    private fun uploadFile(doc: String, size: Long, rel: String): Long? {
         val enc = rel.split('/').joinToString("/") { java.net.URLEncoder.encode(it, "UTF-8").replace("+", "%20") }
         val c = URL("http://$addr/up/$enc").openConnection() as HttpURLConnection
         try {
@@ -571,8 +723,8 @@ object Pc {
             c.readTimeout = 120_000
             c.setRequestProperty("X-Token", token)
             c.doOutput = true
-            if (t.size > 0) c.setFixedLengthStreamingMode(t.size) else c.setChunkedStreamingMode(256 * 1024)
-            app.contentResolver.openInputStream(Uri.parse(t.uri))?.use { inp -> c.outputStream.use { inp.copyTo(it, 256 * 1024) } } ?: return null
+            if (size > 0) c.setFixedLengthStreamingMode(size) else c.setChunkedStreamingMode(256 * 1024)
+            app.contentResolver.openInputStream(Uri.parse(doc))?.use { inp -> c.outputStream.use { inp.copyTo(it, 256 * 1024) } } ?: return null
             if (c.responseCode != 200) return null
             return JSONObject(c.inputStream.use { String(it.readBytes()) }).optLong("id").takeIf { it > 0 }
         } finally { c.disconnect() }
@@ -581,7 +733,8 @@ object Pc {
     /** Songtext eines PC-Titels: Offline-Kopie (.lrc daneben), sonst von Minimal Library */
     fun lyrics(ctx: Context, uri: String): String? {
         val tid = trackIdOf(uri) ?: return null
-        local[tid]?.let { u -> File((Uri.parse(u).path ?: "").substringBeforeLast('.') + ".lrc").takeIf { it.exists() }?.let { return it.readText() } }
+        val h = home()
+        if (h != null) files[tid]?.let { rel -> Saf.read(ctx, Uri.parse(h), lrcOf(rel))?.let { return it } }
         if (addr.isEmpty()) return null
         return try {
             val (st, body) = request("GET", "http://$addr/l/$tid", timeout = 4000)

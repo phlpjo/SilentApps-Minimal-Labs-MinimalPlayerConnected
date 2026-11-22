@@ -65,12 +65,15 @@ import kotlinx.coroutines.withContext
 
 @Composable
 fun HomeScreen(ui: Actions, prefs: Prefs, now: NowPlaying) {
-    val section = prefs.section
+    // Früherer Bereich „PC“ gehört jetzt zu Musik
+    val section = if (prefs.section == PC) MUSIC else prefs.section
     var query by rememberSaveable(section) { mutableStateOf("") }
     val focus = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
     val pcState by Pc.state.collectAsState()
-    val roots = if (section == PC) emptyList() else prefs.roots(section)
+    // Mit Minimal Library verbunden: „Musik“ zeigt die Bibliothek
+    val library = section == MUSIC && pcState.paired
+    val roots = if (library) emptyList() else prefs.roots(section)
     val version by Library.version.collectAsState()
     val scanning by Library.scanning.collectAsState()
 
@@ -91,11 +94,9 @@ fun HomeScreen(ui: Actions, prefs: Prefs, now: NowPlaying) {
             Tab(stringResource(R.string.music), section == MUSIC) { prefs.showSection(MUSIC) }
             Spacer(Modifier.width(22.dp))
             Tab(stringResource(R.string.books), section == BOOKS) { prefs.showSection(BOOKS) }
-            Spacer(Modifier.width(22.dp))
-            Tab(stringResource(R.string.pc_tab), section == PC) { prefs.showSection(PC) }
         }
         Spacer(Modifier.height(22.dp))
-        if (roots.isNotEmpty() || (section == PC && pcState.loaded)) {
+        if (roots.isNotEmpty() || (library && pcState.loaded)) {
             Box(Modifier.floatIn(1)) {
                 SearchField(
                     query, { query = it },
@@ -106,7 +107,7 @@ fun HomeScreen(ui: Actions, prefs: Prefs, now: NowPlaying) {
         }
         Box(Modifier.weight(1f).fillMaxWidth()) { key(section) {
             when {
-                section == PC -> PcArea(ui, prefs, now, query, version)
+                library -> PcArea(ui, prefs, now, query, version)
                 roots.isEmpty() -> Column(Modifier.align(Alignment.CenterStart).floatIn(2)) {
                     val pending = prefs.pendingRoots(section)
                     if (pending.isNotEmpty()) {
@@ -630,7 +631,7 @@ fun SettingsScreen(ui: Actions, prefs: Prefs) {
         Toggle(stringResource(R.string.rescan), if (scanning) "…" else "") { ui.rescan() }
         T(stringResource(R.string.library_count, counts.first, counts.second), size = 14.sp, color = Faint)
 
-        PcSettings()
+        PcSettings(ui)
 
         Section(stringResource(R.string.playback))
         Toggle(stringResource(R.string.skip_back), stringResource(R.string.seconds_fmt, prefs.back)) { prefs.cycleBack() }

@@ -775,7 +775,7 @@ object Library {
     /** null = Datei nicht in der Bibliothek (kann keinen Stern bekommen) */
     suspend fun isStarred(uri: String): Boolean? = withContext(Dispatchers.IO) {
         val t = dao.byUri(uri) ?: return@withContext null
-        if (t.section != MUSIC || Pc.isPc(t.uri)) return@withContext null
+        if (t.section != MUSIC) return@withContext null
         val pl = starPlaylist(false) ?: return@withContext false
         dao.inPlaylist(pl, t.id) > 0
     }
@@ -783,13 +783,14 @@ object Library {
     suspend fun toggleStar(uri: String): Boolean? {
         val r = withContext(Dispatchers.IO) {
             val t = dao.byUri(uri) ?: return@withContext null
-            if (t.section != MUSIC || Pc.isPc(t.uri)) return@withContext null
+            if (t.section != MUSIC) return@withContext null
             val pl = starPlaylist(true)!!
             if (dao.inPlaylist(pl, t.id) > 0) { dao.removeTrack(pl, t.id); false }
             else { dao.addToPlaylist(pl, listOf(t.id)); true }
         }
         stars.value++
         version.value++
+        starPlaylist(false)?.let { pushIfPc(it) }
         return r
     }
 
@@ -845,9 +846,11 @@ object Library {
         items.mapNotNull { i -> byId[i.trackId]?.let { PlaylistTrack(i.id, i.pos, it) } }
     }
 
-    suspend fun createPlaylist(name: String): Long = withContext(Dispatchers.IO) {
-        dao.insertPlaylist(Playlist(name = name.trim(), created = System.currentTimeMillis()))
-    }.also { version.value++ }
+    /** pc = Playlist der Bibliothek (Minimal Library); wird beim nächsten Kontakt dort angelegt */
+    suspend fun createPlaylist(name: String, pc: Boolean = false): Long = withContext(Dispatchers.IO) {
+        if (pc) dao.insertPlaylist(Playlist(name = name.trim(), created = System.currentTimeMillis(), uid = "pcnew-" + java.util.UUID.randomUUID().toString().take(8)))
+        else dao.insertPlaylist(Playlist(name = name.trim(), created = System.currentTimeMillis()))
+    }.also { version.value++; if (pc) Pc.changed() }
 
     suspend fun addToPlaylist(id: Long, trackIds: List<Long>) {
         withContext(Dispatchers.IO) { dao.addToPlaylist(id, trackIds) }
@@ -876,7 +879,7 @@ object Library {
     /** Playlist vom Computer geändert → an Minimal Library schicken */
     suspend fun pushIfPc(id: Long) {
         val uid = withContext(Dispatchers.IO) { dao.playlist(id)?.uid }
-        if (Pc.isPcPlaylist(uid)) Pc.push(id)
+        if (Pc.isPcPlaylist(uid)) Pc.changed()
     }
 
     /** Titel um eine Stelle verschieben (dir = −1 nach oben, +1 nach unten) */

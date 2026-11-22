@@ -51,6 +51,7 @@ sealed interface Screen {
     data object Settings : Screen
     data object Licenses : Screen
     data class Export(val preselect: Long?) : Screen
+    data object Pair : Screen
     data object Playlists : Screen
     data class Playlist(val id: Long, val name: String) : Screen
 }
@@ -101,6 +102,8 @@ interface Actions {
     fun exportPlaylist(id: Long)
     /** Playlisten auf einen Stick: Ziel wählen lassen, dann exportieren */
     fun exportTo(ids: List<Long>, layout: String)
+    /** Hauptordner auf dem Handy wählen (Musik der Bibliothek) */
+    fun pickHome()
 }
 
 class MainActivity : ComponentActivity(), Actions {
@@ -133,6 +136,19 @@ class MainActivity : ComponentActivity(), Actions {
 
 
     override fun exportPlaylist(id: Long) = open(Screen.Export(id))
+
+    private val homePicker = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+        if (uri != null) {
+            try {
+                contentResolver.takePersistableUriPermission(uri, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+            } catch (_: Exception) { }
+            Pc.setHome(uri.toString())
+        }
+    }
+
+    override fun pickHome() {
+        try { homePicker.launch(null) } catch (_: Exception) { }
+    }
 
     override fun exportTo(ids: List<Long>, layout: String) {
         exportIds = ids
@@ -195,6 +211,7 @@ class MainActivity : ComponentActivity(), Actions {
                                 Screen.Settings -> SettingsScreen(this@MainActivity, prefs)
                                 Screen.Licenses -> LicensesScreen(this@MainActivity)
                                 is Screen.Export -> ExportScreen(this@MainActivity, s)
+                                Screen.Pair -> PairScreen(this@MainActivity)
                                 Screen.Playlists -> PlaylistsScreen(this@MainActivity, now)
                                 is Screen.Playlist -> PlaylistScreen(this@MainActivity, prefs, now, s)
                             }
@@ -213,6 +230,7 @@ class MainActivity : ComponentActivity(), Actions {
         Screen.Settings -> 50
         Screen.Licenses -> 51
         is Screen.Export -> 12
+        Screen.Pair -> 52
         Screen.Playlists -> 10
         is Screen.Playlist -> 11
         Screen.Player -> 100
