@@ -115,17 +115,9 @@ private fun PcPairing() {
 /** Zusätzliche Punkte im Ordner-Menü für Ordner vom PC */
 @Composable
 fun PcFolderOptions(f: Entry.Folder, onDone: () -> Unit) {
-    val scope = rememberCoroutineScope()
     val key = Pc.folderPin(f.root, f.path)
     val pinned = remember(f) { Pc.isPinned(key) }
     Option(stringResource(if (pinned) R.string.pc_offline_off else R.string.pc_offline_on)) { Pc.setPinned(key, !pinned); onDone() }
-    HoldOption(stringResource(R.string.pc_organize), stringResource(R.string.pc_organize_hint)) {
-        Library.bg.launch {
-            val msg = try { Pc.organize(withContext(Dispatchers.IO) { Library.dao.subtree(f.root, f.path) }) } catch (e: Exception) { e.message ?: "Fehler" }
-            Pc.state.value = Pc.state.value.copy(error = msg)
-        }
-        onDone()
-    }
 }
 
 /** Ganz oben, in jedem Bildschirm: Empfang, Offline-Download, Export */

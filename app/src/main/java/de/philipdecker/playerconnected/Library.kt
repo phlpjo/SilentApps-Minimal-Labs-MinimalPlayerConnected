@@ -773,7 +773,12 @@ object Library {
     }
 
     /** Alle Titel eines Containers in Abspielreihenfolge */
-    suspend fun queue(key: String): List<Track> = withContext(Dispatchers.IO) {
+    suspend fun queue(key: String): List<Track> = queueAll(key).let { list ->
+        // ohne Verbindung zum PC: nur offline gespeicherte Titel vom PC
+        if (Pc.state.value.online) list else list.filter { !Pc.isPc(it.uri) || Pc.isOffline(it.uri) }
+    }
+
+    private suspend fun queueAll(key: String): List<Track> = withContext(Dispatchers.IO) {
         val k = Keys.parse(key) ?: return@withContext emptyList()
         when (k.kind) {
             'd' -> dao.files(k.root, k.rest).sortedWith(fileOrder)

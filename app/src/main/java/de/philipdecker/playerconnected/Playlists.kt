@@ -37,6 +37,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
@@ -99,7 +100,8 @@ fun PlaylistsScreen(ui: Actions, now: NowPlaying) {
                             }
                             T(p.name, size = 24.sp, weight = FontWeight.Light, maxLines = 2)
                         }
-                        T(pluralStringResource(R.plurals.tracks_count, p.count, p.count) + totalTime(p.duration).let { if (it.isEmpty()) "" else "  ·  $it" },
+                        T(pluralStringResource(R.plurals.tracks_count, p.count, p.count) + totalTime(p.duration).let { if (it.isEmpty()) "" else "  ·  $it" } +
+                            (if (Pc.isPcPlaylist(p.uid) && Pc.isPinned(Pc.playlistPin(p.uid))) "  ·  " + stringResource(R.string.pc_offline_mark) else ""),
                             size = 13.sp, color = Faint, spacing = 0.8.sp, maxLines = 1)
                     }
                 }
@@ -170,6 +172,7 @@ fun PlaylistScreen(ui: Actions, prefs: Prefs, now: NowPlaying, s: Screen.Playlis
     val pull = rememberPullClose { ui.back() }
     val key = Keys.playlist(s.id)
     val current = now.item?.mediaId
+    val pcState by Pc.state.collectAsState()
 
     Column(
         Modifier
@@ -198,12 +201,16 @@ fun PlaylistScreen(ui: Actions, prefs: Prefs, now: NowPlaying, s: Screen.Playlis
             ) {
                 items(tracks ?: emptyList(), key = { it.itemId }) { t ->
                     val playing = t.track.uri == current && now.container == key
-                    Row(Modifier.fillMaxWidth().depth(list, t.itemId).tap(onLong = { itemMenu = t }) { ui.play(key, t.track.uri) }.padding(vertical = 9.dp), verticalAlignment = Alignment.CenterVertically) {
+                    // Titel vom PC ohne Verbindung und ohne Offline-Kopie: ausgegraut, nicht antippbar
+                    val avail = !Pc.isPc(t.track.uri) || pcState.online || Pc.isOffline(t.track.uri)
+                    Row(Modifier.fillMaxWidth().depth(list, t.itemId).graphicsLayer { alpha = if (avail) 1f else 0.35f }
+                        .tap(onLong = { itemMenu = t }) { if (avail) ui.play(key, t.track.uri) }.padding(vertical = 9.dp), verticalAlignment = Alignment.CenterVertically) {
                     val cover = t.track.cover.takeIf { prefs.covers && it.isNotEmpty() }
                     if (cover != null) CoverThumb(cover, 40.dp, Modifier.padding(end = 14.dp))
                     Column(Modifier.weight(1f)) {
                         Labeled(Library.label(t.track), if (prefs.showIcons && cover == null) "eighth-notes" else null, size = 20.sp, color = if (playing) Ink else Ink.copy(alpha = 0.88f))
-                        val sub = listOf(t.track.dir.substringAfterLast('/'), if (t.track.duration > 0) clock(t.track.duration) else "").filter { it.isNotEmpty() }.joinToString("  ·  ")
+                        val sub = listOf(t.track.dir.substringAfterLast('/'), if (t.track.duration > 0) clock(t.track.duration) else "",
+                            if (Pc.isOffline(t.track.uri)) stringResource(R.string.pc_offline_mark) else "").filter { it.isNotEmpty() }.joinToString("  ·  ")
                         if (playing) T(stringResource(R.string.now_playing), size = 12.sp, color = Dim, spacing = 1.2.sp, maxLines = 1)
                         else if (sub.isNotEmpty()) T(sub, size = 13.sp, color = Faint, spacing = 0.8.sp, maxLines = 1)
                     }

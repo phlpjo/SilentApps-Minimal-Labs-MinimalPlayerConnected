@@ -193,7 +193,6 @@
     <string name="pc_tab">PC</string>
     <string name="pc_code_wrong">Wrong code</string>
     <string name="pc_unpaired">This phone is no longer paired – please pair again</string>
-    <string name="pc_organized_fmt">%d files sorted</string>
     <string name="pc_errors_fmt">%d errors</string>
     <string name="pc_need_folder">Choose a receive folder first (Settings → Receive from Minimal Library)</string>
     <string name="pc_loading">Loading library …</string>
@@ -202,15 +201,13 @@
     <string name="pc_offline">not reachable</string>
     <string name="pc_offline_hint">Start Minimal Library on the computer (same Wi-Fi). Offline copies keep playing.</string>
     <string name="pc_offline_progress_fmt">Offline: %1$d of %2$d</string>
-    <string name="pc_intro">Your Minimal Library on the phone: all folders and playlists, play directly, edit playlists, sort files and keep folders or playlists offline. On the computer: Minimal Library → Settings → Minimal Player Connected shows the code.</string>
+    <string name="pc_intro">Your Minimal Library on the phone: all folders and playlists, play directly, edit playlists and keep folders or playlists offline. On the computer: Minimal Library → Settings → Minimal Player Connected shows the code.</string>
     <string name="pc_tap_to_pair">Tap to pair</string>
     <string name="pc_none_found">No computer found. Is Minimal Library running in the same Wi-Fi with sharing switched on?</string>
     <string name="pc_search_again">Search again</string>
     <string name="pc_code_title">Code from Minimal Library on %s</string>
     <string name="pc_offline_on">Make available offline</string>
     <string name="pc_offline_off">Remove offline copy</string>
-    <string name="pc_organize">Sort files on the computer</string>
-    <string name="pc_organize_hint">hold · moves files</string>
     <string name="pc_section">Computer (Minimal Library)</string>
     <string name="pc_settings_none">Not paired. Open “PC” at the top to pair.</string>
     <string name="pc_refresh">Reload library</string>
@@ -226,4 +223,5 @@
     <string name="export_choose">Choose stick and export</string>
     <string name="export_none">Choose at least one playlist</string>
     <string name="export_hint">Plug in the USB stick (USB-C or adapter) and choose it in the next step. Tracks from the PC are copied over Wi-Fi.</string>
+    <string name="pc_offline_mark">offline</string>
 </resources>

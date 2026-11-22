@@ -192,7 +192,6 @@
     <string name="pc_tab">PC</string>
     <string name="pc_code_wrong">Code falsch</string>
     <string name="pc_unpaired">Dieses Handy ist nicht mehr gekoppelt – bitte neu koppeln</string>
-    <string name="pc_organized_fmt">%d Dateien sortiert</string>
     <string name="pc_errors_fmt">%d Fehler</string>
     <string name="pc_need_folder">Erst einen Empfangsordner wählen (Einstellungen → Von Minimal Library empfangen)</string>
     <string name="pc_loading">Lade Bibliothek …</string>
@@ -201,15 +200,13 @@
     <string name="pc_offline">nicht erreichbar</string>
     <string name="pc_offline_hint">Minimal Library am Computer starten (gleiches WLAN). Offline gespeicherte Titel laufen weiter.</string>
     <string name="pc_offline_progress_fmt">Offline: %1$d von %2$d</string>
-    <string name="pc_intro">Deine Minimal Library auf dem Handy: alle Ordner und Playlisten, direkt abspielen, Playlisten bearbeiten, Dateien sortieren und Ordner oder Playlisten offline verfügbar machen. Den Code zeigt Minimal Library unter Einstellungen → Minimal Player Connected.</string>
+    <string name="pc_intro">Deine Minimal Library auf dem Handy: alle Ordner und Playlisten, direkt abspielen, Playlisten bearbeiten und Ordner oder Playlisten offline verfügbar machen. Den Code zeigt Minimal Library unter Einstellungen → Minimal Player Connected.</string>
     <string name="pc_tap_to_pair">Antippen zum Koppeln</string>
     <string name="pc_none_found">Kein Computer gefunden. Läuft Minimal Library im selben WLAN und ist die Freigabe eingeschaltet?</string>
     <string name="pc_search_again">Erneut suchen</string>
     <string name="pc_code_title">Code aus Minimal Library auf %s</string>
     <string name="pc_offline_on">Offline verfügbar machen</string>
     <string name="pc_offline_off">Nicht mehr offline</string>
-    <string name="pc_organize">Dateien am Computer sortieren</string>
-    <string name="pc_organize_hint">halten · verschiebt Dateien</string>
     <string name="pc_section">Computer (Minimal Library)</string>
     <string name="pc_settings_none">Nicht gekoppelt. Zum Koppeln oben „PC“ öffnen.</string>
     <string name="pc_refresh">Bibliothek neu laden</string>
@@ -225,4 +222,5 @@
     <string name="export_choose">Stick wählen und exportieren</string>
     <string name="export_none">Mindestens eine Playlist wählen</string>
     <string name="export_hint">USB-Stick anstecken (USB-C oder Adapter) und im nächsten Schritt auswählen. Titel vom PC werden übers WLAN kopiert.</string>
+    <string name="pc_offline_mark">offline</string>
 </resources>

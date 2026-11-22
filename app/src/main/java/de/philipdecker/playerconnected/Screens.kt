@@ -39,6 +39,7 @@ import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.media3.common.C
@@ -309,6 +310,10 @@ fun EntryList(
         value = withContext(Dispatchers.IO) { ids.chunked(500).flatMap { Library.dao.progressFor(it) }.associateBy { it.id } }
     }
     val version by Library.version.collectAsState()
+    val pcState by Pc.state.collectAsState()
+    val offlineDirs by produceState(emptySet<String>(), version, pcState.online, entries) {
+        value = if (!pcState.online && entries.any { it is Entry.Folder && Pc.isPcRoot(it.root) }) Pc.offlineDirs() else emptySet()
+    }
     // Ordner-Cover (alle Titel gleiches Cover)
     val folderCovers by produceState<Map<String, String>>(emptyMap(), entries, version, prefs.covers) { value = if (prefs.covers) Library.folderCovers(entries) else emptyMap() }
     // Spielzeit je Ordner (inkl. Unterordner)
@@ -348,16 +353,27 @@ fun EntryList(
             contentPadding = PaddingValues(top = if (fromSearch) 14.dp else half - 40.dp, bottom = half),
         ) {
             header()
+            // Titel vom PC: ohne Verbindung nur die offline gespeicherten (Rest ausgegraut, nicht antippbar)
+            fun ok(t: Track) = !Pc.isPc(t.uri) || pcState.online || Pc.isOffline(t.uri)
+            fun okDir(f: Entry.Folder) = !Pc.isPcRoot(f.root) || pcState.online || (f.root + "|" + f.path) in offlineDirs
             val row: @Composable (Entry) -> Unit = { e ->
                 Box(Modifier.fillMaxWidth().depth(list, e.id)) {
                     when (e) {
-                        is Entry.Folder -> FolderRow(prefs, section, e, progress[Keys.progressOf(Keys.tree(BOOKS, e.root, e.path))],
-                            percents[Keys.progressOf(Keys.tree(BOOKS, e.root, e.path))], durations[e.id] ?: 0L, folderCovers[e.id], fromSearch,
-                            onOpen = { ui.open(Screen.Folder(section, e.root, e.path, e.name)) },
-                            onLong = { menu = e })
-                        is Entry.File -> FileRow(prefs, section, e.track, e.track.uri == current, progress[Keys.progressOfFile(e.track.uri)], fromSearch,
-                            onLong = if (section == MUSIC) ({ addTrack = e.track }) else null) {
-                            ui.play(searchKey ?: Library.playKeyFor(section, e.track), e.track.uri)
+                        is Entry.Folder -> {
+                            val avail = okDir(e)
+                            FolderRow(prefs, section, e, progress[Keys.progressOf(Keys.tree(BOOKS, e.root, e.path))],
+                                percents[Keys.progressOf(Keys.tree(BOOKS, e.root, e.path))], durations[e.id] ?: 0L, folderCovers[e.id], fromSearch,
+                                available = avail, offline = Pc.isPcRoot(e.root) && Pc.isPinned(Pc.folderPin(e.root, e.path)),
+                                onOpen = { if (avail) ui.open(Screen.Folder(section, e.root, e.path, e.name)) },
+                                onLong = { if (avail) menu = e })
+                        }
+                        is Entry.File -> {
+                            val avail = ok(e.track)
+                            FileRow(prefs, section, e.track, e.track.uri == current, progress[Keys.progressOfFile(e.track.uri)], fromSearch,
+                                available = avail, offline = Pc.isOffline(e.track.uri),
+                                onLong = if (section == MUSIC && avail) ({ addTrack = e.track }) else null) {
+                                if (avail) ui.play(searchKey ?: Library.playKeyFor(section, e.track), e.track.uri)
+                            }
                         }
                     }
                 }
@@ -379,8 +395,8 @@ fun EntryList(
 }
 
 @Composable
-private fun FolderRow(prefs: Prefs, section: Int, e: Entry.Folder, p: Progress?, percent: Int?, duration: Long, cover: String?, fromSearch: Boolean, onOpen: () -> Unit, onLong: () -> Unit) {
-    Row(Modifier.fillMaxWidth().tap(onLong = onLong, onClick = onOpen).padding(vertical = 9.dp), verticalAlignment = Alignment.CenterVertically) {
+private fun FolderRow(prefs: Prefs, section: Int, e: Entry.Folder, p: Progress?, percent: Int?, duration: Long, cover: String?, fromSearch: Boolean, available: Boolean = true, offline: Boolean = false, onOpen: () -> Unit, onLong: () -> Unit) {
+    Row(Modifier.fillMaxWidth().graphicsLayer { alpha = if (available) 1f else 0.35f }.tap(onLong = onLong, onClick = onOpen).padding(vertical = 9.dp), verticalAlignment = Alignment.CenterVertically) {
     if (cover != null) CoverThumb(cover, 46.dp, Modifier.padding(end = 14.dp))
     Column(Modifier.weight(1f)) {
         Labeled(e.name, if (prefs.showIcons && cover == null) (if (section == BOOKS) "book-open" else "folder") else null, size = 24.sp, weight = FontWeight.Light, maxLines = 2)
@@ -388,7 +404,8 @@ private fun FolderRow(prefs: Prefs, section: Int, e: Entry.Folder, p: Progress?,
             p != null && p.finished -> "✓\u00A0" + stringResource(R.string.heard)
             p != null -> (percent?.let { "$it\u00A0%  ·  " } ?: "") + stringResource(R.string.track_pos_fmt, p.idx + 1, p.count, clock(p.position))
             fromSearch && e.path.contains('/') -> e.path.substringBeforeLast('/').replace("/", "  ›  ")
-            e.total > 0 -> pluralStringResource(R.plurals.files_count, e.total, e.total) + totalTime(duration).let { if (it.isEmpty()) "" else "  ·  $it" }
+            e.total > 0 -> pluralStringResource(R.plurals.files_count, e.total, e.total) + totalTime(duration).let { if (it.isEmpty()) "" else "  ·  $it" } +
+                (if (offline) "  ·  " + stringResource(R.string.pc_offline_mark) else "")
             else -> null
         }
         if (detail != null) T(detail, size = 13.sp, color = if (p != null) Dim else Faint, spacing = 0.8.sp, maxLines = 1)
@@ -397,9 +414,9 @@ private fun FolderRow(prefs: Prefs, section: Int, e: Entry.Folder, p: Progress?,
 }
 
 @Composable
-private fun FileRow(prefs: Prefs, section: Int, t: Track, playing: Boolean, p: Progress?, fromSearch: Boolean, onLong: (() -> Unit)? = null, onClick: () -> Unit) {
+private fun FileRow(prefs: Prefs, section: Int, t: Track, playing: Boolean, p: Progress?, fromSearch: Boolean, available: Boolean = true, offline: Boolean = false, onLong: (() -> Unit)? = null, onClick: () -> Unit) {
     val cover = t.cover.takeIf { prefs.covers && it.isNotEmpty() }
-    Row(Modifier.fillMaxWidth().tap(onLong = onLong, onClick = onClick).padding(vertical = 9.dp), verticalAlignment = Alignment.CenterVertically) {
+    Row(Modifier.fillMaxWidth().graphicsLayer { alpha = if (available) 1f else 0.35f }.tap(onLong = onLong, onClick = onClick).padding(vertical = 9.dp), verticalAlignment = Alignment.CenterVertically) {
     if (cover != null) CoverThumb(cover, 40.dp, Modifier.padding(end = 14.dp))
     Column(Modifier.weight(1f)) {
         Labeled(Library.label(t), if (prefs.showIcons && cover == null) "eighth-notes" else null, size = 20.sp, color = if (playing) Ink else Ink.copy(alpha = 0.88f), maxLines = 2)
@@ -411,7 +428,7 @@ private fun FileRow(prefs: Prefs, section: Int, t: Track, playing: Boolean, p: P
             left != null -> "$len  ·  $left"
             p != null && p.position > 0 -> clock(p.position)
             else -> len
-        }
+        }.let { d -> if (offline) listOfNotNull(d, stringResource(R.string.pc_offline_mark)).joinToString("  ·  ") else d }
         if (playing) T(stringResource(R.string.now_playing), size = 12.sp, color = Dim, spacing = 1.2.sp)
         else if (detail != null) T(detail, size = 13.sp, color = Faint, spacing = 0.8.sp, maxLines = 1)
     }

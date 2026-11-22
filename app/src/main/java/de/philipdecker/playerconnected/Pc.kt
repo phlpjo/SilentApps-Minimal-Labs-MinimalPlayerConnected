@@ -28,7 +28,7 @@ import java.net.URL
 
 /**
  * Bibliothek am Computer (Minimal Library): solange sie läuft, sieht die App alle Ordner und Playlisten 1:1,
- * spielt direkt ab (Streaming im Heimnetz), bearbeitet Playlisten, sortiert Dateien am PC und macht Ordner
+ * spielt direkt ab (Streaming im Heimnetz), bearbeitet Playlisten und macht Ordner
  * oder Playlisten offline verfügbar (echte Dateien im Empfangsordner – erscheinen dann auch unter „Musik“).
  *
  * Titel vom PC stehen in der normalen Datenbank (Bereich Musik) unter eigenen Wurzeln „pc:<PC>:<Nr>“ mit
@@ -379,15 +379,6 @@ object Pc {
         } catch (e: Exception) { state.value = state.value.copy(error = e.message); null }
     }
 
-    /** Dateien am PC nach dem Schema aus Minimal Library sortieren */
-    suspend fun organize(tracks: List<Track>): String = withContext(Dispatchers.IO) {
-        val ids = tracks.mapNotNull { trackIdOf(it.uri) }
-        val o = JSONObject(api("POST", "/organize", JSONObject().put("ids", JSONArray(ids)).toString()))
-        refresh()
-        val errs = o.optJSONArray("errors")?.length() ?: 0
-        app.getString(R.string.pc_organized_fmt, o.optInt("moved")) + if (errs > 0) " · " + app.getString(R.string.pc_errors_fmt, errs) else ""
-    }
-
     // ───────── Offline verfügbar ─────────
     // Gemerkte Auswahl („d|<Wurzel>|<Pfad>“ für Ordner, „l|<uid>“ für Playlisten) und welche PC-Titel als Datei vorliegen.
 
@@ -403,6 +394,17 @@ object Pc {
 
     private fun saveOffline() {
         try { offlineFile().writeText(JSONObject(local.mapKeys { it.key.toString() } as Map<*, *>).toString()) } catch (_: Exception) { }
+    }
+
+    /** „Wurzel|Ordner“ (inkl. übergeordneter Ordner), in denen offline gespeicherte Titel liegen */
+    suspend fun offlineDirs(): Set<String> = withContext(Dispatchers.IO) {
+        val out = HashSet<String>()
+        for (r in roots()) for (t in Library.dao.tracksOfRoot(r.uri)) {
+            if (!isOffline(t.uri)) continue
+            var d = t.dir
+            while (true) { out += r.uri + "|" + d; if (d.isEmpty()) break; d = if (d.contains('/')) d.substringBeforeLast('/') else "" }
+        }
+        out
     }
 
     fun isOffline(uri: String) = trackIdOf(uri)?.let { local.containsKey(it) } == true
