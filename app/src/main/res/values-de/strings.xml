@@ -174,4 +174,19 @@
     <string name="wave_queue">aktuelle Titelliste</string>
     <string name="wave_track">beim Öffnen</string>
     <string name="wave_off">aus</string>
+    <string name="receive_section">Minimal Library</string>
+    <string name="receive_entry">Von Minimal Library empfangen</string>
+    <string name="receive_title">Empfangen</string>
+    <string name="receive_folder">Empfangsordner</string>
+    <string name="receive_pick">Ordner wählen</string>
+    <string name="receive_change">Anderen Ordner wählen</string>
+    <string name="receive_need_folder">Wähle, wohin die Musik vom Computer soll. Der Ordner wird automatisch zu deinen Musikordnern hinzugefügt.</string>
+    <string name="receive_code">Kopplungscode</string>
+    <string name="receive_how">Am Computer: Minimal Library → Sync → + Ziel hinzufügen → Handy im WLAN. Handy und Computer müssen im selben WLAN sein. Diesen Bildschirm während des Empfangs offen lassen.</string>
+    <string name="receive_ready">Bereit zum Empfangen</string>
+    <string name="receive_from">Von %s</string>
+    <string name="receive_progress">Empfange %1$d von %2$d</string>
+    <string name="receive_done">Fertig – Bibliothek und Playlisten aktualisiert</string>
+    <string name="receive_paired">Gekoppelte Computer: %d</string>
+    <string name="receive_forget">Alle Computer entkoppeln</string>
 </resources>

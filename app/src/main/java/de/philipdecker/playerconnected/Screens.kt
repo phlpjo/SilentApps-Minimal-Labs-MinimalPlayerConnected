@@ -596,6 +596,9 @@ fun SettingsScreen(ui: Actions, prefs: Prefs) {
         Toggle(stringResource(R.string.rescan), if (scanning) "…" else "") { ui.rescan() }
         T(stringResource(R.string.library_count, counts.first, counts.second), size = 14.sp, color = Faint)
 
+        Section(stringResource(R.string.receive_section))
+        Toggle(stringResource(R.string.receive_entry), "") { ui.open(Screen.Receive) }
+
         Section(stringResource(R.string.playback))
         Toggle(stringResource(R.string.skip_back), stringResource(R.string.seconds_fmt, prefs.back)) { prefs.cycleBack() }
         Toggle(stringResource(R.string.skip_forward), stringResource(R.string.seconds_fmt, prefs.forward)) { prefs.cycleForward() }

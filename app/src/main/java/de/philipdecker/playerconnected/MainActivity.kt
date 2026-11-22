@@ -46,6 +46,7 @@ sealed interface Screen {
     data object Player : Screen
     data object Settings : Screen
     data object Licenses : Screen
+    data object Receive : Screen
     data object Playlists : Screen
     data class Playlist(val id: Long, val name: String) : Screen
 }
@@ -94,6 +95,7 @@ interface Actions {
     fun removeFolder(section: Int, uri: String)
     fun rescan()
     fun exportPlaylist(id: Long)
+    fun pickReceiveFolder()
 }
 
 class MainActivity : ComponentActivity(), Actions {
@@ -120,6 +122,21 @@ class MainActivity : ComponentActivity(), Actions {
             val id = exportId
             scope.launch { Library.exportPlaylist(this@MainActivity, id, uri) }
         }
+    }
+
+    /** Empfangsordner für Minimal Library: Lese- und Schreibrecht dauerhaft, gleich als Musikordner einlesen */
+    private val receivePicker = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+        if (uri != null) {
+            try {
+                contentResolver.takePersistableUriPermission(uri, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+            } catch (_: Exception) { }
+            Receive.setFolder(this, uri.toString())
+            scope.launch { Library.addRoot(this@MainActivity, MUSIC, uri) }
+        }
+    }
+
+    override fun pickReceiveFolder() {
+        try { receivePicker.launch(null) } catch (_: Exception) { }
     }
 
     override fun exportPlaylist(id: Long) {
@@ -175,6 +192,7 @@ class MainActivity : ComponentActivity(), Actions {
                                 Screen.Player -> PlayerScreen(this@MainActivity, prefs, now)
                                 Screen.Settings -> SettingsScreen(this@MainActivity, prefs)
                                 Screen.Licenses -> LicensesScreen(this@MainActivity)
+                                Screen.Receive -> ReceiveScreen(this@MainActivity)
                                 Screen.Playlists -> PlaylistsScreen(this@MainActivity, now)
                                 is Screen.Playlist -> PlaylistScreen(this@MainActivity, prefs, now, s)
                             }
@@ -190,6 +208,7 @@ class MainActivity : ComponentActivity(), Actions {
         is Screen.Folder -> 1 + s.path.count { it == '/' } + (if (s.path.isEmpty()) 0 else 1)
         Screen.Settings -> 50
         Screen.Licenses -> 51
+        Screen.Receive -> 52
         Screen.Playlists -> 10
         is Screen.Playlist -> 11
         Screen.Player -> 100

@@ -175,4 +175,19 @@
     <string name="wave_queue">current list</string>
     <string name="wave_track">when opened</string>
     <string name="wave_off">off</string>
+    <string name="receive_section">Minimal Library</string>
+    <string name="receive_entry">Receive from Minimal Library</string>
+    <string name="receive_title">Receive</string>
+    <string name="receive_folder">Receive folder</string>
+    <string name="receive_pick">Choose folder</string>
+    <string name="receive_change">Choose another folder</string>
+    <string name="receive_need_folder">Choose where the music from your computer should go. The folder is added to your music folders automatically.</string>
+    <string name="receive_code">Pairing code</string>
+    <string name="receive_how">On your computer: Minimal Library → Sync → + Add target → Phone over Wi-Fi. Phone and computer must be on the same Wi-Fi. Keep this screen open while receiving.</string>
+    <string name="receive_ready">Ready to receive</string>
+    <string name="receive_from">From %s</string>
+    <string name="receive_progress">Receiving %1$d of %2$d</string>
+    <string name="receive_done">Done – library and playlists updated</string>
+    <string name="receive_paired">Paired computers: %d</string>
+    <string name="receive_forget">Unpair all computers</string>
 </resources>
