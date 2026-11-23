@@ -228,4 +228,6 @@
     <string name="others_control">Andere dürfen dieses Handy steuern</string>
     <string name="play_on">Abspielen auf</string>
     <string name="also_playing_fmt">Läuft auch gerade (%1$d)</string>
+    <string name="pc_only_pc_tracks">Dort spielen nur Titel vom Computer</string>
+    <string name="pc_only_main">Titel wählen geht nur für die Haupt-Wiedergabe des Computers</string>
 </resources>

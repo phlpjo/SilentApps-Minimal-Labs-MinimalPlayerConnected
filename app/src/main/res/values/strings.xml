@@ -229,4 +229,6 @@
     <string name="others_control">Others may control this phone</string>
     <string name="play_on">Play on</string>
     <string name="also_playing_fmt">Also playing (%1$d)</string>
+    <string name="pc_only_pc_tracks">Only tracks from the computer can play there</string>
+    <string name="pc_only_main">Choosing tracks only works for the main playback of the computer</string>
 </resources>

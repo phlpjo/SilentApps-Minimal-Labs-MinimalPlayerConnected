@@ -120,7 +120,9 @@ class PcPlayer(
             Player.COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM, Player.COMMAND_SEEK_TO_DEFAULT_POSITION,
             Player.COMMAND_SEEK_TO_NEXT, Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM,
             Player.COMMAND_SEEK_TO_PREVIOUS, Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM,
-            Player.COMMAND_SET_SHUFFLE_MODE,
+            Player.COMMAND_SET_SHUFFLE_MODE, Player.COMMAND_PREPARE,
+            Player.COMMAND_SET_MEDIA_ITEM, Player.COMMAND_CHANGE_MEDIA_ITEMS, Player.COMMAND_SEEK_TO_MEDIA_ITEM,
+            Player.COMMAND_SET_SPEED_AND_PITCH, Player.COMMAND_SET_REPEAT_MODE,
             Player.COMMAND_GET_CURRENT_MEDIA_ITEM, Player.COMMAND_GET_TIMELINE, Player.COMMAND_GET_METADATA,
             Player.COMMAND_GET_DEVICE_VOLUME, Player.COMMAND_SET_DEVICE_VOLUME_WITH_FLAGS, Player.COMMAND_ADJUST_DEVICE_VOLUME_WITH_FLAGS,
         ).build()
@@ -139,14 +141,54 @@ class PcPlayer(
             .setIsSeekable(true)
             .setDurationUs(if (n.durMs > 0) n.durMs * 1000 else C.TIME_UNSET)
             .build()
-        return b.setPlaylist(listOf(data))
-            .setCurrentMediaItemIndex(0)
+        // Platzhalter davor/danach: so sind „Zurück“ und „Weiter“ am Handy (und in der Benachrichtigung) bedienbar.
+        // Die echte Warteschlange liegt am PC.
+        val hasNext = n.queue.isEmpty() || n.index < 0 || n.index < n.queue.size - 1
+        val list = buildList {
+            add(placeholder("prev:${n.trackId}"))
+            add(data)
+            if (hasNext) add(placeholder("next:${n.trackId}"))
+        }
+        return b.setPlaylist(list)
+            .setCurrentMediaItemIndex(1)
             .setPlaybackState(Player.STATE_READY)
             .setContentPositionMs(PositionSupplier { n.position() })
             .build()
     }
 
     private fun done(): ListenableFuture<*> = Futures.immediateVoidFuture()
+
+    private fun placeholder(uid: String) = MediaItemData.Builder(uid)
+        .setMediaItem(MediaItem.Builder().setMediaId(uid).setMediaMetadata(MediaMetadata.Builder().setTitle("").setIsPlayable(true).setIsBrowsable(false).build()).build())
+        .build()
+
+    /** Titel am Handy angetippt (während der PC gesteuert wird): diese Warteschlange spielt jetzt am PC */
+    override fun handleSetMediaItems(mediaItems: MutableList<MediaItem>, startIndex: Int, startPositionMs: Long): ListenableFuture<*> {
+        val tids = mediaItems.map { Pc.trackIdOf(it.mediaId) ?: Pc.trackIdOf(it.localConfiguration?.uri?.toString() ?: "") ?: Pc.trackIdOf(it.requestMetadata.mediaUri?.toString() ?: "") }
+        val start = if (startIndex in tids.indices) startIndex else 0
+        val list = tids.filterNotNull()
+        if (list.isEmpty() || tids[start] == null) {
+            // Titel liegt nur auf dem Handy – den kann der PC nicht abspielen
+            main.post { android.widget.Toast.makeText(ctx, ctx.getString(R.string.pc_only_pc_tracks), android.widget.Toast.LENGTH_SHORT).show() }
+            return done()
+        }
+        if (sid != PcRemote.MAIN) {
+            main.post { android.widget.Toast.makeText(ctx, ctx.getString(R.string.pc_only_main), android.widget.Toast.LENGTH_SHORT).show() }
+            return done()
+        }
+        val idx = list.indexOf(tids[start]!!).coerceAtLeast(0)
+        wantPlay = true
+        wantUntil = SystemClock.elapsedRealtime() + 3000
+        PcRemote.ctl(sid, JSONObject().apply {
+            put("cmd", "queue"); put("ids", JSONArray(list)); put("index", idx)
+            put("pos", (if (startPositionMs == C.TIME_UNSET) 0L else startPositionMs) / 1000.0); put("play", true)
+        })
+        return done()
+    }
+
+    override fun handlePrepare(): ListenableFuture<*> = done()
+    override fun handleSetPlaybackParameters(playbackParameters: androidx.media3.common.PlaybackParameters): ListenableFuture<*> = done()
+    override fun handleSetRepeatMode(repeatMode: Int): ListenableFuture<*> = done()
 
     override fun handleSetPlayWhenReady(playWhenReady: Boolean): ListenableFuture<*> {
         wantPlay = playWhenReady
@@ -156,9 +198,9 @@ class PcPlayer(
     }
 
     override fun handleSeek(mediaItemIndex: Int, positionMs: Long, seekCommand: Int): ListenableFuture<*> {
-        when (seekCommand) {
-            Player.COMMAND_SEEK_TO_NEXT, Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM -> PcRemote.ctl(sid, "next")
-            Player.COMMAND_SEEK_TO_PREVIOUS, Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM -> PcRemote.ctl(sid, "prev")
+        when {
+            seekCommand == Player.COMMAND_SEEK_TO_NEXT || seekCommand == Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM || mediaItemIndex >= 2 -> PcRemote.ctl(sid, "next")
+            seekCommand == Player.COMMAND_SEEK_TO_PREVIOUS || seekCommand == Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM || mediaItemIndex == 0 -> PcRemote.ctl(sid, "prev")
             else -> PcRemote.ctl(sid, "seek", "pos" to (positionMs.coerceAtLeast(0) / 1000.0))
         }
         return done()

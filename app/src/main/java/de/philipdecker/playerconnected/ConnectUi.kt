@@ -79,7 +79,6 @@ fun OutputSheet(ui: Actions, now: NowPlaying, onDone: () -> Unit) {
     val house by PcRemote.house.collectAsState()
     LaunchedEffect(Unit) { Connect.notice.value = null; Connect.search(ctx) }
     val list = rememberLazyListState()
-    var arming by remember { mutableStateOf<String?>(null) }
     // Lautstärke beim Ziehen sofort zeigen, Gerät folgt
     var vol by remember { mutableFloatStateOf(-1f) }
     val shownVol = if (vol >= 0f) vol else now.volume / 100f
@@ -94,7 +93,6 @@ fun OutputSheet(ui: Actions, now: NowPlaying, onDone: () -> Unit) {
 
     // Lautsprecher: was das Handy findet, plus was nur der PC sieht (dann steuert der PC ihn)
     val h = house
-    val mainBusy = h?.session(PcRemote.MAIN)?.takeIf { it.playing && mine != PcRemote.MAIN }
     val speakers = buildList {
         devices.forEach { d ->
             val k = outKey(d.id)
@@ -107,15 +105,18 @@ fun OutputSheet(ui: Actions, now: NowPlaying, onDone: () -> Unit) {
             val k = outKey(o.id)
             add(OutRow(k, o.name, viaFmt.format(h?.computer ?: ""), "speaker", { Connect.select(PcRemote.target(PcRemote.MAIN, o.id, o.name)) },
                 on = active?.pc == true && outKey(active?.pcOutput ?: "") == k,
-                busy = h?.busy(o.id, mine) ?: mainBusy))
+                busy = h?.busy(o.id, mine)))
         }
     }
     // Soundkarten des PCs (Lautsprecher, Kopfhörer am PC) – gespielt wird über die Haupt-Wiedergabe dort
     val pcOuts = h?.outputs?.filter { it.kind == "pc" }.orEmpty().map { o ->
         val k = outKey(o.id)
-        OutRow(k, o.name, h?.computer, "laptop", { Connect.select(PcRemote.target(PcRemote.MAIN, o.id, o.name)) },
+        // „Dieser PC“ heißt vom Handy aus so wie der Computer
+        val isDefault = o.id == "local:default" || o.id == "local"
+        val name = if (isDefault) h?.computer?.ifBlank { null } ?: o.name else o.name
+        OutRow(k, name, if (isDefault) null else h?.computer, "laptop", { Connect.select(PcRemote.target(PcRemote.MAIN, o.id, name)) },
             on = active?.pc == true && outKey(active?.pcOutput ?: "") == k,
-            busy = h?.busy(o.id, mine) ?: mainBusy)
+            busy = h?.busy(o.id, mine))
     }
     val others = h?.sessions?.filter { !it.self && it.id != mine && it.playing }.orEmpty()
 
@@ -130,14 +131,19 @@ fun OutputSheet(ui: Actions, now: NowPlaying, onDone: () -> Unit) {
         LazyColumn(Modifier.heightIn(max = 340.dp), state = list) {
             items(speakers + pcOuts, key = { it.icon + it.key }) { r ->
                 val b = r.busy
-                if (b != null && !r.on && arming == r.key) {
-                    HoldOption(stringResource(R.string.take_over_fmt, r.name), stringResource(R.string.take_over_hint_fmt, b.who)) { takeOver(b, r.select) }
-                } else {
-                    Device(
-                        r.icon, r.name, if (b != null && !r.on) busyFmt.format(b.who) else r.sub?.takeIf { r.icon == "laptop" },
-                        on = r.on, waiting = false,
-                        modifier = Modifier.depth(list, r.icon + r.key),
-                    ) { if (b != null && !r.on) arming = r.key else { r.select(); onDone() } }
+                // Antippen = dort abspielen. Spielt dort gerade jemand anderes (anderes Handy), hält dessen Wiedergabe an
+                // und er bekommt einen Hinweis. Steuern einer laufenden PC-Wiedergabe übernimmt nichts, sondern hängt sich an.
+                Device(
+                    r.icon, r.name,
+                    when {
+                        b == null || r.on -> r.sub
+                        b.kind == "phone" -> busyFmt.format(b.who)
+                        else -> "▶ " + listOf(b.artist, b.title).filter { it.isNotBlank() }.joinToString(" – ")
+                    },
+                    on = r.on, waiting = false,
+                    modifier = Modifier.depth(list, r.icon + r.key),
+                ) {
+                    if (b != null && !r.on && b.kind == "phone") takeOver(b, r.select) else { r.select(); onDone() }
                 }
             }
         }
