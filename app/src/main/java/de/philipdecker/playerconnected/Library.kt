@@ -617,6 +617,19 @@ object Library {
     }
 
     /** Titel vom Computer (Minimal Library) als eigene Wurzel übernehmen. true = etwas geändert */
+    /**
+     * Titel, die am PC in einen anderen Musikordner gewandert sind (oder deren Ordner-Nummer sich verschoben hat),
+     * behalten ihre ID – sonst fielen sie beim Abgleich aus Playlisten (Löschen + neu Anlegen).
+     */
+    suspend fun relocate(fresh: Collection<Track>, roots: Collection<String>) = lock.withLock {
+        withContext(Dispatchers.IO) {
+            val byUri = HashMap<String, Track>()
+            for (r in roots) for (t in dao.tracksOfRoot(r)) byUri[t.uri] = t
+            val moved = fresh.mapNotNull { f -> byUri[f.uri]?.takeIf { it.root != f.root }?.copy(root = f.root, dir = f.dir, name = f.name) }
+            if (moved.isNotEmpty()) dao.updateTracks(moved)
+        }
+    }
+
     suspend fun mirrorRoot(rootUri: String, fresh: List<Track>): Boolean = lock.withLock {
         val direct = HashMap<String, Int>()
         val dirs = LinkedHashSet<String>()

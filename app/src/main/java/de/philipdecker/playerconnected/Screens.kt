@@ -325,6 +325,11 @@ fun EntryList(
     val offlineDirs by produceState(emptySet<String>(), version, pcState.online, entries) {
         value = if (!pcState.online && entries.any { it is Entry.Folder && Pc.isPcRoot(it.root) }) Pc.offlineDirs() else emptySet()
     }
+    // Ordner, deren Titel alle auf dem Handy liegen → „offline“ anzeigen
+    val fullOffline by produceState(emptySet<String>(), version, entries) {
+        val rs = entries.filterIsInstance<Entry.Folder>().map { it.root }.filter { Pc.isPcRoot(it) }.toSet()
+        value = if (rs.isEmpty()) emptySet() else Pc.fullyOfflineDirs(rs)
+    }
     // Ordner-Cover (alle Titel gleiches Cover)
     val folderCovers by produceState<Map<String, String>>(emptyMap(), entries, version, prefs.covers) { value = if (prefs.covers) Library.folderCovers(entries) else emptyMap() }
     // Spielzeit je Ordner (inkl. Unterordner)
@@ -374,7 +379,7 @@ fun EntryList(
                             val avail = okDir(e)
                             FolderRow(prefs, section, e, progress[Keys.progressOf(Keys.tree(BOOKS, e.root, e.path))],
                                 percents[Keys.progressOf(Keys.tree(BOOKS, e.root, e.path))], durations[e.id] ?: 0L, folderCovers[e.id], fromSearch,
-                                available = avail, offline = Pc.isPcRoot(e.root) && Pc.isPinned(Pc.folderPin(e.root, e.path)),
+                                available = avail, offline = Pc.isPcRoot(e.root) && (Pc.isPinned(Pc.folderPin(e.root, e.path)) || (e.root + "|" + e.path) in fullOffline),
                                 onOpen = { if (avail) ui.open(Screen.Folder(section, e.root, e.path, e.name)) },
                                 onLong = { if (avail) menu = e })
                         }

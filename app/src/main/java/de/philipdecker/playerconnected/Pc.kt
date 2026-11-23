@@ -274,6 +274,8 @@ object Pc {
                     )
                 }
                 val names = (0 until rootNames.length()).map { rootNames.getString(it) }
+                // erst Umzüge zwischen Musikordnern übernehmen (IDs und Playlist-Plätze bleiben), dann je Ordner abgleichen
+                Library.relocate(byRoot.values.flatten(), Library.dao.knownRoots().filter { isPcRoot(it) })
                 for (i in names.indices) Library.mirrorRoot(rootKey(pc, i), byRoot[i] ?: emptyList())
                 // weggefallene Musikordner am PC
                 Library.dao.knownRoots().filter { isPcRoot(it) && (!it.startsWith("pc:$pc:") || (it.substringAfterLast(':').toIntOrNull() ?: 0) >= names.size) }
@@ -560,6 +562,24 @@ object Pc {
     }
 
     fun isOffline(uri: String) = trackIdOf(uri)?.let { docs.containsKey(it) } == true
+
+    /** „Wurzel|Ordner“, in denen ALLE Titel (inkl. Unterordner) auf dem Handy liegen */
+    suspend fun fullyOfflineDirs(rootUris: Collection<String>): Set<String> = withContext(Dispatchers.IO) {
+        val total = HashMap<String, Int>()
+        val off = HashMap<String, Int>()
+        for (r in rootUris) for (t in Library.dao.tracksOfRoot(r)) {
+            val o = isOffline(t.uri)
+            var d = t.dir
+            while (true) {
+                val k = r + "|" + d
+                total[k] = (total[k] ?: 0) + 1
+                if (o) off[k] = (off[k] ?: 0) + 1
+                if (d.isEmpty()) break
+                d = if (d.contains('/')) d.substringBeforeLast('/') else ""
+            }
+        }
+        total.filter { (k, n) -> n > 0 && off[k] == n }.keys
+    }
 
     private fun pins(): Set<String> = sp().getStringSet("pins", emptySet()) ?: emptySet()
     fun isPinned(key: String) = key in pins()
