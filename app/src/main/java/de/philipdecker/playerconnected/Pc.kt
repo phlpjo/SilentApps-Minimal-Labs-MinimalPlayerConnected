@@ -4,6 +4,8 @@ import android.content.Context
 import android.net.Uri
 import android.net.wifi.WifiManager
 import androidx.media3.datasource.DataSpec
+import kotlinx.coroutines.joinAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -264,6 +266,9 @@ object Pc {
                     val size = a.optLong(8, 0L)
                     val uri = uriOf(pc, tid, file)
                     uriById[tid] = uri
+                    // hat am PC ein eigenes Cover?
+                    val hc = a.opt(9)
+                    if (hc == true || hc == 1) withCover.add(tid) else withCover.remove(tid)
                     // „modified“ als Fingerabdruck der Angaben → Änderungen am PC werden übernommen
                     val stamp = (title + "\u0001" + artist + "\u0001" + ms + "\u0001" + size).hashCode().toLong()
                     byRoot.getOrPut(ri) { ArrayList() } += Track(
@@ -300,28 +305,47 @@ object Pc {
         }
     }
 
-    /** Ordner, für die in diesem Programmlauf schon nach einem Cover gefragt wurde */
-    private val askedCover = HashSet<String>()
+    /** Titel, die am PC ein eingebettetes Cover haben (aus /lib) */
+    private val withCover = java.util.Collections.synchronizedSet(HashSet<Long>())
+    /** Titel, nach deren Cover in diesem Programmlauf schon gefragt wurde */
+    private val askedCover = java.util.Collections.synchronizedSet(HashSet<String>())
 
-    /** Cover je Ordner einmal holen (spart Datenvolumen; Alben liegen meist in eigenen Ordnern) */
-    private suspend fun fetchCovers() {
-        if (!Prefs.get(app).covers) return
-        var any = false
-        for (r in roots()) {
-            val missing = Library.dao.tracksOfRoot(r.uri).filter { it.cover.isEmpty() }
-            for ((dir, group) in missing.groupBy { it.dir }) {
-                if (!askedCover.add(r.uri + "|" + dir)) continue
-                val url = coverUrl(group.first().uri) ?: return
-                val bytes = try {
-                    val c = URL(url).openConnection() as HttpURLConnection
-                    c.connectTimeout = 4000; c.readTimeout = 15000
-                    try { if (c.responseCode == 200) c.inputStream.use { it.readBytes() } else null } finally { c.disconnect() }
-                } catch (_: Exception) { null }
-                val h = bytes?.let { Covers.save(app, it) } ?: ""
-                if (h.isNotEmpty()) { group.map { it.id }.chunked(500).forEach { Library.dao.setCover(it, h) }; any = true }
-            }
+    /** Jeder Titel bekommt sein eigenes Cover (gleiche Bilder werden nur einmal gespeichert) */
+    private suspend fun fetchCovers() = coroutineScope {
+        if (!Prefs.get(app).covers) return@coroutineScope
+        // früher bekam ein ganzer Ordner das Cover des ersten Titels → einmal zurücksetzen und je Titel neu holen
+        if (!sp().getBoolean("coverPerTrack", false)) {
+            for (r in roots()) Library.dao.tracksOfRoot(r.uri).filter { it.cover.isNotEmpty() }.map { it.id }.chunked(500).forEach { Library.dao.setCover(it, "") }
+            sp().edit().putBoolean("coverPerTrack", true).apply()
         }
-        if (any) Library.version.value++
+        val todo = ArrayList<Track>()
+        for (r in roots()) for (t in Library.dao.tracksOfRoot(r.uri)) {
+            val tid = trackIdOf(t.uri) ?: continue
+            if (t.cover.isEmpty() && tid in withCover && askedCover.add(t.uri)) todo += t
+        }
+        if (todo.isEmpty()) return@coroutineScope
+        val done = java.util.concurrent.atomic.AtomicInteger()
+        val queue = java.util.concurrent.ConcurrentLinkedQueue(todo)
+        // drei gleichzeitig – schnell, ohne den PC zu überlasten
+        (1..3).map {
+            launch(Dispatchers.IO) {
+                while (true) {
+                    val t = queue.poll() ?: break
+                    val url = coverUrl(t.uri) ?: break
+                    val bytes = try {
+                        val c = URL(url).openConnection() as HttpURLConnection
+                        c.connectTimeout = 4000; c.readTimeout = 15000
+                        try { if (c.responseCode == 200) c.inputStream.use { it.readBytes() } else null } finally { c.disconnect() }
+                    } catch (_: Exception) { null }
+                    val h = bytes?.let { Covers.save(app, it) } ?: ""
+                    if (h.isNotEmpty()) {
+                        Library.dao.setCover(listOf(t.id), h)
+                        if (done.incrementAndGet() % 40 == 0) Library.version.value++
+                    }
+                }
+            }
+        }.joinAll()
+        if (done.get() > 0) Library.version.value++
     }
 
     // ───────── Playlisten & Stern: Zusammenführung Handy ↔ PC ─────────
