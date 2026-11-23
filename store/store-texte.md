@@ -123,7 +123,7 @@ Formats: everything Android can play, e.g. MP3, M4A/M4B, AAC, FLAC, OGG, Opus, W
 - **In-App-Käufe:** Nein
 - **App-Zugriff:** Alle Funktionen ohne Anmeldung verfügbar
 - **Nachrichten-App / Gesundheits-App / Behörden:** Nein
-- **Datenschutzerklärung-URL:** z. B. https://philipdecker.de/minimal-player-connected/datenschutz (Datei: store/datenschutz.html)
+- **Datenschutzerklärung-URL:** z. B. https://silentapps-minimal-labs.com/app/minimal-player-connected/privacy (Datei: store/datenschutz.html)
 - **Vordergrund-Dienst (FOREGROUND_SERVICE_MEDIA_PLAYBACK):** In der Console unter „App-Inhalte → Berechtigungen für Dienste im Vordergrund“ angeben: *Mediawiedergabe – spielt vom Nutzer gestartete Audiodateien weiter, wenn die App im Hintergrund ist oder der Bildschirm aus ist.* Ggf. kurzes Video verlangt: Titel starten, Bildschirm sperren, Wiedergabe läuft weiter, Steuerung auf dem Sperrbildschirm.
 
 - **Hinweis Markennamen:** „Sonos“ steht nur sachlich als Kompatibilität („funktioniert mit …“) in der Beschreibung – nie im Titel, in der Kurzbeschreibung oder in Grafiken. Sonos ist eine Marke der Sonos, Inc.; die App ist nicht mit Sonos verbunden.

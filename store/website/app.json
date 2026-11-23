@@ -1,0 +1,52 @@
+{
+  "slug": "minimal-player-connected",
+  "name": "Minimal Player Connected",
+  "package": "de.philipdecker.playerconnected",
+  "price": 0,
+  "category": "Musik & Audio",
+  "languages": [
+    "de",
+    "en"
+  ],
+  "status": "soon",
+  "play_url": "https://play.google.com/store/apps/details?id=de.philipdecker.playerconnected",
+  "developer": "SilentApps Minimal Labs",
+  "contact": "apps@silentapps-minimal-labs.com",
+  "logo": {
+    "black": "logo-schwarz.svg",
+    "white": "logo-weiss.svg",
+    "icon": "icon-512.png"
+  },
+  "privacy": {
+    "de": "privacy-de.md",
+    "en": "privacy-en.md"
+  },
+  "en": {
+    "tagline": "Like Spotify, only private.",
+    "short": "Your music from your phone, your PC and on Wi-Fi speakers.",
+    "who": "For anyone who wants to use their own music collection like a streaming service: manage it on the PC with Minimal Library, listen on your phone, send it to speakers on your home network – no cloud, no account.",
+    "features": [
+      "Everything from Minimal Player: music, audiobooks, folders, playlists",
+      "Stream your PC library, edit playlists, keep them offline",
+      "Playback on Wi-Fi speakers and DLNA devices at home",
+      "Playlists in sync with your PC",
+      "No server, no cloud – just your home network",
+      "English and German"
+    ],
+    "meta": "Music from your phone and PC, also on Wi-Fi speakers. A private alternative to streaming – no cloud, no account, free."
+  },
+  "de": {
+    "tagline": "Wie Spotify, nur privat.",
+    "short": "Deine Musik vom Handy, vom PC und auf WLAN-Lautsprechern.",
+    "who": "Für alle, die ihre eigene Musiksammlung wie einen Streamingdienst nutzen wollen: am PC mit Minimal Library verwalten, auf dem Handy hören, auf Lautsprecher im Heimnetz schicken – ohne Cloud und ohne Konto.",
+    "features": [
+      "Alles aus Minimal Player: Musik, Hörbücher, Ordner, Playlisten",
+      "PC-Bibliothek streamen, Playlisten bearbeiten, offline verfügbar machen",
+      "Wiedergabe auf WLAN-Lautsprechern und DLNA-Geräten im Heimnetz",
+      "Playlisten mit dem PC synchron",
+      "Kein Server, keine Cloud – nur dein Heimnetz",
+      "Deutsch und Englisch"
+    ],
+    "meta": "Musik von Handy und PC, auch auf WLAN-Lautsprechern. Private Alternative zu Streaming – ohne Cloud, ohne Konto, kostenlos."
+  }
+}
