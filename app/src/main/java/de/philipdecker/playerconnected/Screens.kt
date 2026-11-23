@@ -344,15 +344,24 @@ fun EntryList(
         is Entry.Folder -> progress[Keys.progressOf(Keys.tree(BOOKS, e.root, e.path))]?.finished == true
         is Entry.File -> e.track.dir.isEmpty() && progress[Keys.progressOf(Library.containerFor(BOOKS, e.track))]?.finished == true
     }
-    val (open, done) = remember(entries, progress, section, fromSearch) {
-        if (section == BOOKS && !fromSearch) entries.partition { !heard(it) } else entries to emptyList()
+    // Ohne Verbindung zum PC: Titel/Ordner vom PC ohne Offline-Kopie ganz ausblenden
+    val shown = remember(entries, pcState.online, offlineDirs) {
+        if (pcState.online) entries else entries.filter { e ->
+            when (e) {
+                is Entry.Folder -> !Pc.isPcRoot(e.root) || (e.root + "|" + e.path) in offlineDirs
+                is Entry.File -> !Pc.isPc(e.track.uri) || Pc.isOffline(e.track.uri)
+            }
+        }
+    }
+    val (open, done) = remember(shown, progress, section, fromSearch) {
+        if (section == BOOKS && !fromSearch) shown.partition { !heard(it) } else shown to emptyList()
     }
 
     // Header-Einträge zählen, damit die Buchstabenleiste richtig springt
     var headerCount by remember { mutableStateOf(0) }
-    LaunchedEffect(list, entries.size, done.isEmpty()) {
+    LaunchedEffect(list, shown.size, done.isEmpty()) {
         snapshotFlow { list.layoutInfo.totalItemsCount }.collect { total ->
-            headerCount = (total - entries.size - (if (entries.isEmpty()) 1 else 0) - (if (done.isNotEmpty()) 1 else 0)).coerceAtLeast(0)
+            headerCount = (total - shown.size - (if (shown.isEmpty()) 1 else 0) - (if (done.isNotEmpty()) 1 else 0)).coerceAtLeast(0)
         }
     }
     val showBar = !fromSearch && open.size > 24
@@ -420,13 +429,19 @@ private fun FolderRow(prefs: Prefs, section: Int, e: Entry.Folder, p: Progress?,
             p != null && p.finished -> "✓\u00A0" + stringResource(R.string.heard)
             p != null -> (percent?.let { "$it\u00A0%  ·  " } ?: "") + stringResource(R.string.track_pos_fmt, p.idx + 1, p.count, clock(p.position))
             fromSearch && e.path.contains('/') -> e.path.substringBeforeLast('/').replace("/", "  ›  ")
-            e.total > 0 -> pluralStringResource(R.plurals.files_count, e.total, e.total) + totalTime(duration).let { if (it.isEmpty()) "" else "  ·  $it" } +
-                (if (offline) "  ·  " + stringResource(R.string.pc_offline_mark) else "")
+            e.total > 0 -> pluralStringResource(R.plurals.files_count, e.total, e.total) + totalTime(duration).let { if (it.isEmpty()) "" else "  ·  $it" }
             else -> null
         }
         if (detail != null) T(detail, size = 13.sp, color = if (p != null) Dim else Faint, spacing = 0.8.sp, maxLines = 1)
     }
+    if (offline) OfflineMark()
     }
+}
+
+/** Symbol „heruntergeladen / offline verfügbar“ am Ende einer Zeile */
+@Composable
+fun OfflineMark() {
+    Glyph("download", 16.dp, Dim, Modifier.padding(start = 12.dp))
 }
 
 @Composable
@@ -444,10 +459,11 @@ private fun FileRow(prefs: Prefs, section: Int, t: Track, playing: Boolean, p: P
             left != null -> "$len  ·  $left"
             p != null && p.position > 0 -> clock(p.position)
             else -> len
-        }.let { d -> if (offline) listOfNotNull(d, stringResource(R.string.pc_offline_mark)).joinToString("  ·  ") else d }
+        }
         if (playing) T(stringResource(R.string.now_playing), size = 12.sp, color = Dim, spacing = 1.2.sp)
         else if (detail != null) T(detail, size = 13.sp, color = Faint, spacing = 0.8.sp, maxLines = 1)
     }
+    if (offline) OfflineMark()
     }
 }
 

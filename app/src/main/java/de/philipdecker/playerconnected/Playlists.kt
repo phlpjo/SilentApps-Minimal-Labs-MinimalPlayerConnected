@@ -199,7 +199,9 @@ fun PlaylistScreen(ui: Actions, prefs: Prefs, now: NowPlaying, s: Screen.Playlis
                 state = list,
                 contentPadding = PaddingValues(top = half - 60.dp, bottom = half),
             ) {
-                items(tracks ?: emptyList(), key = { it.itemId }) { t ->
+                // Ohne Verbindung: Titel vom PC ohne Offline-Kopie ausblenden
+                val visible = (tracks ?: emptyList()).filter { !Pc.isPc(it.track.uri) || pcState.online || Pc.isOffline(it.track.uri) }
+                items(visible, key = { it.itemId }) { t ->
                     val playing = t.track.uri == current && now.container == key
                     // Titel vom PC ohne Verbindung und ohne Offline-Kopie: ausgegraut, nicht antippbar
                     val avail = !Pc.isPc(t.track.uri) || pcState.online || Pc.isOffline(t.track.uri)
@@ -209,11 +211,11 @@ fun PlaylistScreen(ui: Actions, prefs: Prefs, now: NowPlaying, s: Screen.Playlis
                     if (cover != null) CoverThumb(cover, 40.dp, Modifier.padding(end = 14.dp))
                     Column(Modifier.weight(1f)) {
                         Labeled(Library.label(t.track), if (prefs.showIcons && cover == null) "eighth-notes" else null, size = 20.sp, color = if (playing) Ink else Ink.copy(alpha = 0.88f))
-                        val sub = listOf(t.track.dir.substringAfterLast('/'), if (t.track.duration > 0) clock(t.track.duration) else "",
-                            if (Pc.isOffline(t.track.uri)) stringResource(R.string.pc_offline_mark) else "").filter { it.isNotEmpty() }.joinToString("  ·  ")
+                        val sub = listOf(t.track.dir.substringAfterLast('/'), if (t.track.duration > 0) clock(t.track.duration) else "").filter { it.isNotEmpty() }.joinToString("  ·  ")
                         if (playing) T(stringResource(R.string.now_playing), size = 12.sp, color = Dim, spacing = 1.2.sp, maxLines = 1)
                         else if (sub.isNotEmpty()) T(sub, size = 13.sp, color = Faint, spacing = 0.8.sp, maxLines = 1)
                     }
+                    if (Pc.isOffline(t.track.uri)) OfflineMark()
                     }
                 }
                 if (tracks?.isEmpty() == true) item(key = "empty") {

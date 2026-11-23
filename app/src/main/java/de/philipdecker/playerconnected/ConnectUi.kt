@@ -117,23 +117,14 @@ fun OutputSheet(ui: Actions, now: NowPlaying, onDone: () -> Unit) {
             on = active?.pc == true && outKey(active?.pcOutput ?: "") == k,
             busy = h?.busy(o.id, mine) ?: mainBusy)
     }
-    val others = h?.sessions?.filter { !it.self && it.id != mine && (it.playing || it.title.isNotBlank()) }.orEmpty()
+    val others = h?.sessions?.filter { !it.self && it.id != mine && it.playing }.orEmpty()
 
+    var showOthers by remember { mutableStateOf(false) }
     Sheet(onDismiss = onDone) {
-        if (others.isNotEmpty()) {
-            Caption(stringResource(R.string.house_now))
-            Spacer(Modifier.height(6.dp))
-            others.forEach { s ->
-                SessionCard(s) {
-                    // PC-Wiedergabe antippen = hier voll steuern (Player zeigt sie dann an)
-                    if (s.isPc && s.controllable) { Connect.select(PcRemote.target(s.id, s.outputId, s.outputName)); onDone() }
-                }
-            }
-            Spacer(Modifier.height(14.dp))
-        }
-        Caption(stringResource(R.string.output_title))
+        // Einfach: eine Liste „Abspielen auf“ – jeder Ausgang einmal; was sonst noch läuft, eingeklappt darunter
+        Caption(stringResource(R.string.play_on))
         Spacer(Modifier.height(10.dp))
-        Device("cast", stringResource(R.string.this_phone), null, on = active == null, waiting = wanted == null && active != null) {
+        Device("smartphone", stringResource(R.string.this_phone), null, on = active == null, waiting = wanted == null && active != null) {
             Connect.select(null); onDone()
         }
         LazyColumn(Modifier.heightIn(max = 340.dp), state = list) {
@@ -143,7 +134,7 @@ fun OutputSheet(ui: Actions, now: NowPlaying, onDone: () -> Unit) {
                     HoldOption(stringResource(R.string.take_over_fmt, r.name), stringResource(R.string.take_over_hint_fmt, b.who)) { takeOver(b, r.select) }
                 } else {
                     Device(
-                        r.icon, r.name, if (b != null && !r.on) busyFmt.format(b.who) else r.sub,
+                        r.icon, r.name, if (b != null && !r.on) busyFmt.format(b.who) else r.sub?.takeIf { r.icon == "laptop" },
                         on = r.on, waiting = false,
                         modifier = Modifier.depth(list, r.icon + r.key),
                     ) { if (b != null && !r.on) arming = r.key else { r.select(); onDone() } }
@@ -151,7 +142,19 @@ fun OutputSheet(ui: Actions, now: NowPlaying, onDone: () -> Unit) {
             }
         }
         if (searching) T(stringResource(R.string.searching_devices), size = 14.sp, color = Faint, modifier = Modifier.padding(vertical = 8.dp))
-        else if (speakers.isEmpty() && pcOuts.isEmpty()) T(stringResource(R.string.no_devices), size = 14.sp, color = Faint, modifier = Modifier.padding(vertical = 8.dp))
+        else if (speakers.isEmpty() && pcOuts.isEmpty()) T(stringResource(R.string.no_devices), size = 14.sp, color = Faint, modifier = Modifier.padding(vertical = 8.dp).tap { Connect.search(ctx) })
+
+        if (others.isNotEmpty()) {
+            Spacer(Modifier.height(10.dp))
+            T((if (showOthers) "▾  " else "▸  ") + stringResource(R.string.also_playing_fmt, others.size), size = 14.sp, color = Dim,
+                modifier = Modifier.fillMaxWidth().tap { showOthers = !showOthers }.padding(vertical = 8.dp))
+            if (showOthers) others.forEach { s ->
+                SessionCard(s) {
+                    // PC-Wiedergabe antippen = hier voll steuern (Player zeigt sie dann an)
+                    if (s.isPc && s.controllable) { Connect.select(PcRemote.target(s.id, s.outputId, s.outputName)); onDone() }
+                }
+            }
+        }
 
         if (active != null && now.remote) {
             Spacer(Modifier.height(14.dp))
@@ -163,7 +166,6 @@ fun OutputSheet(ui: Actions, now: NowPlaying, onDone: () -> Unit) {
             T(stringResource(R.string.remote_hint), size = 12.sp, color = Faint)
         }
         Spacer(Modifier.height(8.dp))
-        Option(stringResource(R.string.search_again), color = Dim, enabled = !searching) { Connect.search(ctx) }
         Option(stringResource(R.string.close), color = Dim) { onDone() }
     }
 }

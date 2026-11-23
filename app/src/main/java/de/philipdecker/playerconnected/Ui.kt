@@ -421,10 +421,11 @@ fun totalTime(ms: Long): String {
 
 /** Kleines Cover (Liste). Reserviert den Platz sofort, damit nichts springt. */
 @Composable
-fun CoverThumb(hash: String, size: androidx.compose.ui.unit.Dp = 42.dp, modifier: Modifier = Modifier) {
+fun CoverThumb(hash: String, size: androidx.compose.ui.unit.Dp = 42.dp, modifier: Modifier = Modifier, zoom: Boolean = true) {
     val ctx = androidx.compose.ui.platform.LocalContext.current
     val img by androidx.compose.runtime.produceState<androidx.compose.ui.graphics.ImageBitmap?>(null, hash) { value = Covers.thumb(ctx, hash) }
-    Box(modifier.size(size).background(Panel, RoundedCornerShape(6.dp))) {
+    // Antippen: Cover fliegt groß in die Mitte
+    Box(modifier.size(size).background(Panel, RoundedCornerShape(6.dp)).then(if (zoom) Modifier.zoomable(hash) else Modifier)) {
         img?.let {
             androidx.compose.foundation.Image(
                 it, contentDescription = null,

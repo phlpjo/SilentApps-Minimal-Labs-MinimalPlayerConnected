@@ -615,7 +615,7 @@ private fun CoverArea(hash: String, modifier: Modifier) {
         },
     ) {
         androidx.compose.animation.Crossfade(targetState = img, animationSpec = androidx.compose.animation.core.tween(600), label = "cover") { b ->
-            if (b != null) Box(Modifier.fillMaxSize()) {
+            if (b != null) Box(Modifier.fillMaxSize().zoomable(hash)) {
                 androidx.compose.foundation.Image(
                     b, contentDescription = null,
                     contentScale = androidx.compose.ui.layout.ContentScale.Crop,

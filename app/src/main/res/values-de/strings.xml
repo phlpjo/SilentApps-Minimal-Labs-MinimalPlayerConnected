@@ -226,4 +226,6 @@
     <string name="paused">pausiert</string>
     <string name="taken_over_fmt">„%1$s“ übernommen von %2$s</string>
     <string name="others_control">Andere dürfen dieses Handy steuern</string>
+    <string name="play_on">Abspielen auf</string>
+    <string name="also_playing_fmt">Läuft auch gerade (%1$d)</string>
 </resources>

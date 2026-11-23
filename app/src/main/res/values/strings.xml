@@ -227,4 +227,6 @@
     <string name="paused">paused</string>
     <string name="taken_over_fmt">“%1$s” taken over by %2$s</string>
     <string name="others_control">Others may control this phone</string>
+    <string name="play_on">Play on</string>
+    <string name="also_playing_fmt">Also playing (%1$d)</string>
 </resources>

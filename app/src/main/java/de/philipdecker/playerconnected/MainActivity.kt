@@ -219,6 +219,8 @@ class MainActivity : ComponentActivity(), Actions {
                     }
                     // Fortschritt (Offline, Hochladen, Export) in jedem Bildschirm
                     TransferLine(Modifier.align(Alignment.TopCenter).windowInsetsPadding(WindowInsets.statusBars))
+                    // Cover groß (über allem)
+                    CoverZoomLayer()
                 }
             }
         }
