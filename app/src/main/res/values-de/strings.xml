@@ -217,4 +217,13 @@
     <string name="pc_lost">Verbindung zum Computer verloren – spielt wieder hier</string>
     <string name="on_computer">Computer</string>
     <string name="pc_playing_fmt">Läuft auf %1$s: %2$s</string>
+    <string name="house_now">Läuft gerade im Haus</string>
+    <string name="busy_fmt">belegt · %1$s</string>
+    <string name="via_fmt">über %1$s</string>
+    <string name="take_over_fmt">%1$s übernehmen</string>
+    <string name="take_over_hint_fmt">halten · %1$s pausiert</string>
+    <string name="view_only">nur ansehen</string>
+    <string name="paused">pausiert</string>
+    <string name="taken_over_fmt">„%1$s“ übernommen von %2$s</string>
+    <string name="others_control">Andere dürfen dieses Handy steuern</string>
 </resources>

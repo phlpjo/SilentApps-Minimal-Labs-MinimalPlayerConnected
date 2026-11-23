@@ -142,14 +142,26 @@ class PlaybackService : MediaLibraryService() {
                 put("dur", if (p.duration > 0) p.duration / 1000.0 else 0.0)
                 put("volume", if (remote != null) p.deviceVolume / 100.0 else exo.volume.toDouble())
                 put("output", Connect.active.value?.name ?: getString(R.string.this_phone))
+                put("outputId", Connect.active.value?.id ?: "phone")
+                // Geteilter Haushalt: dürfen andere dieses Handy steuern?
+                put("remoteCtl", Prefs.get(this@PlaybackService).othersControl)
             }
         }
-        PcRemote.phoneExec = { c ->
+        PcRemote.phoneExec = exec@{ c ->
+            if (!Prefs.get(this).othersControl) return@exec
             val p = player
             when (c.optString("cmd")) {
                 "toggle" -> if (p.playWhenReady) p.pause() else p.play()
                 "play" -> p.play()
-                "pause" -> p.pause()
+                "pause" -> {
+                    p.pause()
+                    // Ausgang wurde von jemand anderem übernommen → kurz sagen, von wem
+                    if (c.optBoolean("takeover") && c.optString("by").isNotBlank()) {
+                        val where = Connect.active.value?.name ?: getString(R.string.this_phone)
+                        android.widget.Toast.makeText(this, getString(R.string.taken_over_fmt, where, c.optString("by")), android.widget.Toast.LENGTH_LONG).show()
+                    }
+                }
+                "seek" -> c.optDouble("pos", -1.0).takeIf { it >= 0 }?.let { p.seekTo((it * 1000).toLong()) }
                 "next" -> p.seekToNext()
                 "prev" -> p.seekToPrevious()
                 "volume" -> {

@@ -61,7 +61,14 @@ fun OutputMini(ui: Actions, now: NowPlaying, modifier: Modifier = Modifier) {
     if (open) OutputSheet(ui, now) { open = false }
 }
 
-/** Auswahl, wo die Musik läuft – wie in Streaming-Apps: antippen, fertig */
+/** Ein Ausgang in der Auswahl – jeder genau einmal, egal ob Handy oder PC ihn gefunden hat */
+private class OutRow(val key: String, val name: String, val sub: String?, val icon: String, val select: () -> Unit, val on: Boolean, val busy: Session?)
+
+/**
+ * Wo läuft was – wie in Streaming-Apps, für den ganzen Haushalt:
+ * oben alle anderen Wiedergaben (PC-Tabs, Handys) live und steuerbar, darunter jeder Ausgang einmal.
+ * Belegte Ausgänge übernimmt man durch Gedrückthalten; die andere Wiedergabe pausiert.
+ */
 @Composable
 fun OutputSheet(ui: Actions, now: NowPlaying, onDone: () -> Unit) {
     val ctx = LocalContext.current
@@ -69,46 +76,82 @@ fun OutputSheet(ui: Actions, now: NowPlaying, onDone: () -> Unit) {
     val searching by Connect.searching.collectAsState()
     val active by Connect.active.collectAsState()
     val wanted by Connect.wanted.collectAsState()
+    val house by PcRemote.house.collectAsState()
     LaunchedEffect(Unit) { Connect.notice.value = null; Connect.search(ctx) }
     val list = rememberLazyListState()
+    var arming by remember { mutableStateOf<String?>(null) }
     // Lautstärke beim Ziehen sofort zeigen, Gerät folgt
     var vol by remember { mutableFloatStateOf(-1f) }
     val shownVol = if (vol >= 0f) vol else now.volume / 100f
+    val mine = active?.takeIf { it.pc }?.pcSession
+    val busyFmt = stringResource(R.string.busy_fmt)
+    val viaFmt = stringResource(R.string.via_fmt)
+
+    fun takeOver(other: Session?, go: () -> Unit) {
+        other?.let { PcRemote.ctl(it.id, org.json.JSONObject().put("cmd", "pause").put("takeover", true)) }
+        go(); onDone()
+    }
+
+    // Lautsprecher: was das Handy findet, plus was nur der PC sieht (dann steuert der PC ihn)
+    val h = house
+    val mainBusy = h?.session(PcRemote.MAIN)?.takeIf { it.playing && mine != PcRemote.MAIN }
+    val speakers = buildList {
+        devices.forEach { d ->
+            val k = outKey(d.id)
+            add(OutRow(k, d.name, d.sub, "speaker", { Connect.select(d) },
+                on = active?.let { a -> if (a.pc) outKey(a.pcOutput) == k else a.id == d.id } == true,
+                busy = h?.busy(d.id, mine)))
+        }
+        val seen = devices.map { outKey(it.id) }.toSet()
+        h?.outputs?.filter { it.kind != "pc" && outKey(it.id) !in seen }?.forEach { o ->
+            val k = outKey(o.id)
+            add(OutRow(k, o.name, viaFmt.format(h?.computer ?: ""), "speaker", { Connect.select(PcRemote.target(PcRemote.MAIN, o.id, o.name)) },
+                on = active?.pc == true && outKey(active?.pcOutput ?: "") == k,
+                busy = h?.busy(o.id, mine) ?: mainBusy))
+        }
+    }
+    // Soundkarten des PCs (Lautsprecher, Kopfhörer am PC) – gespielt wird über die Haupt-Wiedergabe dort
+    val pcOuts = h?.outputs?.filter { it.kind == "pc" }.orEmpty().map { o ->
+        val k = outKey(o.id)
+        OutRow(k, o.name, h?.computer, "laptop", { Connect.select(PcRemote.target(PcRemote.MAIN, o.id, o.name)) },
+            on = active?.pc == true && outKey(active?.pcOutput ?: "") == k,
+            busy = h?.busy(o.id, mine) ?: mainBusy)
+    }
+    val others = h?.sessions?.filter { !it.self && it.id != mine && (it.playing || it.title.isNotBlank()) }.orEmpty()
 
     Sheet(onDismiss = onDone) {
+        if (others.isNotEmpty()) {
+            Caption(stringResource(R.string.house_now))
+            Spacer(Modifier.height(6.dp))
+            others.forEach { s ->
+                SessionCard(s) {
+                    // PC-Wiedergabe antippen = hier voll steuern (Player zeigt sie dann an)
+                    if (s.isPc && s.controllable) { Connect.select(PcRemote.target(s.id, s.outputId, s.outputName)); onDone() }
+                }
+            }
+            Spacer(Modifier.height(14.dp))
+        }
         Caption(stringResource(R.string.output_title))
         Spacer(Modifier.height(10.dp))
         Device("cast", stringResource(R.string.this_phone), null, on = active == null, waiting = wanted == null && active != null) {
             Connect.select(null); onDone()
         }
         LazyColumn(Modifier.heightIn(max = 340.dp), state = list) {
-            items(devices, key = { it.id }) { d ->
-                Device(
-                    "speaker", d.name, d.sub,
-                    on = active?.id == d.id,
-                    waiting = wanted?.id == d.id && active?.id != d.id,
-                    modifier = Modifier.depth(list, d.id),
-                ) { Connect.select(d); onDone() }
-            }
-        }
-        // Computer mit Minimal Library: dessen Ausgänge (der PC selbst, seine Lautsprecher)
-        val pcNow by PcRemote.now.collectAsState()
-        pcNow?.let { n ->
-            if (n.outputs.isNotEmpty()) {
-                Spacer(Modifier.height(10.dp))
-                Caption(n.computer.ifBlank { stringResource(R.string.on_computer) })
-                n.outputs.forEach { (id, name) ->
-                    val on = active?.pc == true && active?.pcOutput == id
+            items(speakers + pcOuts, key = { it.icon + it.key }) { r ->
+                val b = r.busy
+                if (b != null && !r.on && arming == r.key) {
+                    HoldOption(stringResource(R.string.take_over_fmt, r.name), stringResource(R.string.take_over_hint_fmt, b.who)) { takeOver(b, r.select) }
+                } else {
                     Device(
-                        if (id.isEmpty() || id == "local") "laptop" else "speaker", name,
-                        if (n.outputId == id && n.playing) n.title else null,
-                        on = on, waiting = wanted?.id == "pc:$id" && !on,
-                    ) { Connect.select(PcRemote.target(id, name)); onDone() }
+                        r.icon, r.name, if (b != null && !r.on) busyFmt.format(b.who) else r.sub,
+                        on = r.on, waiting = false,
+                        modifier = Modifier.depth(list, r.icon + r.key),
+                    ) { if (b != null && !r.on) arming = r.key else { r.select(); onDone() } }
                 }
             }
         }
         if (searching) T(stringResource(R.string.searching_devices), size = 14.sp, color = Faint, modifier = Modifier.padding(vertical = 8.dp))
-        else if (devices.isEmpty()) T(stringResource(R.string.no_devices), size = 14.sp, color = Faint, modifier = Modifier.padding(vertical = 8.dp))
+        else if (speakers.isEmpty() && pcOuts.isEmpty()) T(stringResource(R.string.no_devices), size = 14.sp, color = Faint, modifier = Modifier.padding(vertical = 8.dp))
 
         if (active != null && now.remote) {
             Spacer(Modifier.height(14.dp))
@@ -123,6 +166,36 @@ fun OutputSheet(ui: Actions, now: NowPlaying, onDone: () -> Unit) {
         Option(stringResource(R.string.search_again), color = Dim, enabled = !searching) { Connect.search(ctx) }
         Option(stringResource(R.string.close), color = Dim) { onDone() }
     }
+}
+
+/** Eine andere Wiedergabe im Haus: wer → wo, was läuft, Tasten (wenn erlaubt) */
+@Composable
+private fun SessionCard(s: Session, onOpen: () -> Unit) {
+    Column(Modifier.fillMaxWidth().tap(onClick = onOpen).padding(vertical = 8.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Glyph(if (s.isPc) "laptop" else "phone", 18.dp, if (s.playing) Ink else Dim)
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                T(s.who + if (s.outputName.isNotBlank()) " → " + s.outputName else "", size = 15.sp, color = if (s.playing) Ink else Dim, glow = s.playing, maxLines = 1)
+                val what = listOf(s.artist, s.title).filter { it.isNotBlank() }.joinToString(" – ")
+                T((if (s.playing) "" else stringResource(R.string.paused) + " · ") + what.ifBlank { "—" }, size = 12.sp, color = Faint, maxLines = 1)
+            }
+        }
+        if (s.controllable) {
+            Row(Modifier.padding(start = 30.dp, top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                Key("⏮") { PcRemote.ctl(s.id, "prev") }
+                Key(if (s.playing) "⏸" else "▶") { PcRemote.ctl(s.id, "toggle") }
+                Key("⏭") { PcRemote.ctl(s.id, "next") }
+                Key("−") { PcRemote.ctl(s.id, "volume", "vol" to (s.volume - 0.1f).coerceIn(0f, 1f).toDouble()) }
+                Key("+") { PcRemote.ctl(s.id, "volume", "vol" to (s.volume + 0.1f).coerceIn(0f, 1f).toDouble()) }
+            }
+        } else T(stringResource(R.string.view_only), size = 12.sp, color = Faint, modifier = Modifier.padding(start = 30.dp, top = 2.dp))
+    }
+}
+
+@Composable
+private fun Key(label: String, onClick: () -> Unit) {
+    T(label, size = 18.sp, color = Ink, modifier = Modifier.tap(onClick = onClick).padding(horizontal = 12.dp, vertical = 6.dp))
 }
 
 @Composable

@@ -218,4 +218,13 @@
     <string name="pc_lost">Connection to the computer lost – playing here again</string>
     <string name="on_computer">Computer</string>
     <string name="pc_playing_fmt">Playing on %1$s: %2$s</string>
+    <string name="house_now">Playing in the house</string>
+    <string name="busy_fmt">in use · %1$s</string>
+    <string name="via_fmt">via %1$s</string>
+    <string name="take_over_fmt">Take over %1$s</string>
+    <string name="take_over_hint_fmt">hold · %1$s pauses</string>
+    <string name="view_only">view only</string>
+    <string name="paused">paused</string>
+    <string name="taken_over_fmt">“%1$s” taken over by %2$s</string>
+    <string name="others_control">Others may control this phone</string>
 </resources>

@@ -646,6 +646,7 @@ fun SettingsScreen(ui: Actions, prefs: Prefs) {
         Toggle(stringResource(R.string.fade), stringResource(R.string.seconds_fmt, prefs.fade)) { prefs.cycleFade() }
         Toggle(stringResource(R.string.shake_restart), if (prefs.shake) on else off) { prefs.toggleShake() }
         Toggle(stringResource(R.string.auto_rewind), if (prefs.autoRewind) on else off) { prefs.toggleAutoRewind() }
+        Toggle(stringResource(R.string.others_control), if (prefs.othersControl) on else off) { prefs.toggleOthersControl() }
 
         Section(stringResource(R.string.sound))
         Toggle(stringResource(R.string.volume), "${prefs.gain}\u00A0%") { sheet = "vol" }
@@ -752,13 +753,13 @@ fun mailLabs(ctx: android.content.Context, app: String) {
 /** Spielt gerade der Computer (und nicht dieses Handy)? Kurz anzeigen – antippen übernimmt die Steuerung */
 @Composable
 fun PcHint(now: NowPlaying) {
-    val n by PcRemote.now.collectAsState()
+    val h by PcRemote.house.collectAsState()
     val active by Connect.active.collectAsState()
-    val p = n ?: return
-    if (!p.playing || active != null || now.playing) return
-    val where = p.outputName.ifBlank { p.computer }
+    if (active != null || now.playing) return
+    val p = h?.sessions?.firstOrNull { it.isPc && it.playing && it.controllable } ?: return
+    val where = p.outputName.ifBlank { p.who }
     Row(
-        Modifier.fillMaxWidth().tap { Connect.select(PcRemote.target(p.outputId, p.outputName)) }.padding(horizontal = 24.dp, vertical = 8.dp),
+        Modifier.fillMaxWidth().tap { Connect.select(PcRemote.target(p.id, p.outputId, p.outputName)) }.padding(horizontal = 24.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Glyph("laptop", 16.dp, Dim)

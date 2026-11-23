@@ -182,6 +182,9 @@ class Prefs private constructor(ctx: Context) {
     var fade by mutableIntStateOf(sp.getInt("fade", 30)); private set
     fun cycleFade() { fade = next(listOf(10, 30, 60), fade); sp.edit().putInt("fade", fade).apply() }
     var shake by mutableStateOf(sp.getBoolean("shake", true)); private set
+    /** Andere Geräte (PC, weitere Handys) dürfen dieses Handy steuern */
+    var othersControl by mutableStateOf(sp.getBoolean("othersControl", true)); private set
+    fun toggleOthersControl() { othersControl = !othersControl; sp.edit().putBoolean("othersControl", othersControl).apply() }
     fun toggleShake() { shake = !shake; sp.edit().putBoolean("shake", shake).apply() }
 
     /** Hörbuch-Tempo (Musik läuft immer mit 1,0) */

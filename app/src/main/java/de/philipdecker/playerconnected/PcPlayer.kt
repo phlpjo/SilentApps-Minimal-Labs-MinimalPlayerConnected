@@ -32,9 +32,11 @@ class PcPlayer(
 ) : SimpleBasePlayer(Looper.getMainLooper()), Outlet {
 
     override var pauseAtEnd = false
+    /** gesteuerte Wiedergabe am PC */
+    private val sid = target.pcSession
     private val main = Handler(Looper.getMainLooper())
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
-    private var last: PcNow? = null
+    private var last: Session? = null
     private var lastSeen = SystemClock.elapsedRealtime()
     /** eigener Befehl: bis der PC ihn meldet, so anzeigen */
     private var wantPlay: Boolean? = null
@@ -47,7 +49,7 @@ class PcPlayer(
     private val poll = object : Runnable {
         override fun run() {
             if (released) return
-            val n = PcRemote.now.value
+            val n = PcRemote.session(sid)
             val t = SystemClock.elapsedRealtime()
             if (n != null && n !== last) {
                 last = n
@@ -67,14 +69,15 @@ class PcPlayer(
         val tids = h.items.map { Pc.trackIdOf(it.mediaId) ?: Pc.trackIdOf(it.requestMetadata.mediaUri?.toString() ?: "") }
         val cur = tids.getOrNull(h.index)
         val list = tids.filterNotNull()
-        if (h.play && list.isNotEmpty()) {
+        // Warteschlange nur an die Haupt-Wiedergabe (deren Titel-Kennungen kennt das Handy)
+        if (h.play && list.isNotEmpty() && sid == PcRemote.MAIN) {
             // Spielt das Handy gerade: Warteschlange, Titel und Stelle wandern zum PC
             val idx = if (cur != null) list.indexOf(cur).coerceAtLeast(0) else 0
-            PcRemote.ctl(JSONObject().apply {
+            PcRemote.ctl(sid, JSONObject().apply {
                 put("cmd", "queue"); put("ids", JSONArray(list)); put("index", idx)
                 put("pos", h.position / 1000.0); put("play", true); put("output", target.pcOutput)
             })
-        } else PcRemote.ctl("output", "id" to target.pcOutput)
+        } else PcRemote.ctl(sid, "output", "id" to target.pcOutput)
         // Einträge für den Rückweg vorbereiten
         scope.launch {
             val byTid = Pc.tracksByTid()
@@ -85,16 +88,18 @@ class PcPlayer(
     }
 
     override fun handoff(): Handoff {
-        val n = last ?: PcRemote.now.value
-        // zurück aufs Handy: PC hält an (wie Spotify)
-        PcRemote.ctl("pause")
+        val n = last ?: PcRemote.session(sid)
+        // Nur die Haupt-Wiedergabe kommt aufs Handy (wie Spotify, PC hält an). Andere Tabs laufen einfach weiter –
+        // das Handy hört nur auf, sie zu steuern.
+        if (sid != PcRemote.MAIN) return Handoff(emptyList(), 0, 0, false, false, Player.REPEAT_MODE_OFF, null)
+        PcRemote.ctl(sid, "pause")
         if (n == null || n.queue.isEmpty()) return Handoff(emptyList(), 0, 0, false, false, Player.REPEAT_MODE_OFF, null)
         val mapped = n.queue.mapNotNull { id -> items[id]?.let { id to it } }
         val idx = mapped.indexOfFirst { it.first == n.trackId }.coerceAtLeast(0)
         return Handoff(mapped.map { it.second }, idx, n.position(), n.playing, false, Player.REPEAT_MODE_OFF, null)
     }
 
-    private fun itemFor(n: PcNow): MediaItem {
+    private fun itemFor(n: Session): MediaItem {
         val id = n.trackId ?: 0L
         items[id]?.let { mi ->
             return mi.buildUpon().setMediaMetadata(mi.mediaMetadata.buildUpon().setTitle(n.title).setDisplayTitle(n.title).setArtist(n.artist.ifEmpty { n.outputName }).build()).build()
@@ -146,22 +151,22 @@ class PcPlayer(
     override fun handleSetPlayWhenReady(playWhenReady: Boolean): ListenableFuture<*> {
         wantPlay = playWhenReady
         wantUntil = SystemClock.elapsedRealtime() + 3000
-        PcRemote.ctl(if (playWhenReady) "play" else "pause")
+        PcRemote.ctl(sid, if (playWhenReady) "play" else "pause")
         return done()
     }
 
     override fun handleSeek(mediaItemIndex: Int, positionMs: Long, seekCommand: Int): ListenableFuture<*> {
         when (seekCommand) {
-            Player.COMMAND_SEEK_TO_NEXT, Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM -> PcRemote.ctl("next")
-            Player.COMMAND_SEEK_TO_PREVIOUS, Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM -> PcRemote.ctl("prev")
-            else -> PcRemote.ctl("seek", "pos" to (positionMs.coerceAtLeast(0) / 1000.0))
+            Player.COMMAND_SEEK_TO_NEXT, Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM -> PcRemote.ctl(sid, "next")
+            Player.COMMAND_SEEK_TO_PREVIOUS, Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM -> PcRemote.ctl(sid, "prev")
+            else -> PcRemote.ctl(sid, "seek", "pos" to (positionMs.coerceAtLeast(0) / 1000.0))
         }
         return done()
     }
 
     override fun handleSetDeviceVolume(deviceVolume: Int, flags: Int): ListenableFuture<*> {
         volume = deviceVolume.coerceIn(0, 100)
-        PcRemote.ctl("volume", "vol" to volume / 100.0)
+        PcRemote.ctl(sid, "volume", "vol" to volume / 100.0)
         return done()
     }
 
@@ -169,12 +174,12 @@ class PcPlayer(
     override fun handleDecreaseDeviceVolume(flags: Int): ListenableFuture<*> = handleSetDeviceVolume(volume - 5, flags)
 
     override fun handleSetShuffleModeEnabled(shuffleModeEnabled: Boolean): ListenableFuture<*> {
-        PcRemote.ctl("shuffle", "on" to shuffleModeEnabled)
+        PcRemote.ctl(sid, "shuffle", "on" to shuffleModeEnabled)
         return done()
     }
 
     override fun handleStop(): ListenableFuture<*> {
-        PcRemote.ctl("pause")
+        PcRemote.ctl(sid, "pause")
         return done()
     }
 

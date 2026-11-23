@@ -45,6 +45,8 @@ data class Target(
     /** Minimal Library am Computer (Fernsteuerung) – pcOutput = Ausgabe dort (local = Lautsprecher des PCs) */
     val pc: Boolean = false,
     val pcOutput: String = "",
+    /** Welche Wiedergabe am PC gesteuert wird ("pc:<tab>") */
+    val pcSession: String = "pc:main",
 )
 
 /**
