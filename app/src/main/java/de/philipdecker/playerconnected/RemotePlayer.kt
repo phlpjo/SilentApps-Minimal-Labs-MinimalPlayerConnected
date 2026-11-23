@@ -14,6 +14,14 @@ import com.google.common.util.concurrent.ListenableFuture
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 
+/** Wiedergabeziel außerhalb des Handys (Lautsprecher im Heimnetz oder Computer) */
+interface Outlet : Player {
+    val target: Target
+    var pauseAtEnd: Boolean
+    fun start(h: Handoff)
+    fun handoff(): Handoff
+}
+
 /** Was beim Umschalten zwischen Handy und Lautsprecher mitgenommen wird */
 class Handoff(
     /** Reihenfolge, in der gespielt wird (bei Zufall schon gemischt) */
@@ -51,10 +59,10 @@ class Handoff(
  */
 class RemotePlayer(
     private val ctx: Context,
-    val target: Target,
+    override val target: Target,
     /** Verbindung weg oder Lautsprecher spielt etwas anderes → zurück aufs Handy (String-Ressource als Grund) */
     private val onLost: (Int) -> Unit,
-) : SimpleBasePlayer(Looper.getMainLooper()) {
+) : SimpleBasePlayer(Looper.getMainLooper()), Outlet {
 
     private class Entry(val uid: Long, val item: MediaItem)
 
@@ -75,7 +83,7 @@ class RemotePlayer(
     private var volume = 25
     private var muted = false
     /** Bei „Ende der Datei“ (Schlaf-Timer) nach dem Titel anhalten */
-    var pauseAtEnd = false
+    override var pauseAtEnd = false
 
     /** Adresse, die der Lautsprecher gerade spielt (null = noch nichts geladen) */
     private var loaded: String? = null
@@ -98,7 +106,7 @@ class RemotePlayer(
 
     // ───────── Start ─────────
 
-    fun start(h: Handoff) {
+    override fun start(h: Handoff) {
         entries = h.items.map { Entry(nextUid++, it) }
         original = h.original?.let { orig ->
             // Gleiche Einträge (gleiche Objekte) wie in entries, damit das Zurückmischen funktioniert
@@ -116,7 +124,7 @@ class RemotePlayer(
     }
 
     /** Für den Rückweg aufs Handy */
-    fun handoff(): Handoff {
+    override fun handoff(): Handoff {
         val items = entries.map { it.item }
         val orig = original?.map { it.item }
         return Handoff(items, index, currentPos(), pwr && state != Player.STATE_ENDED, shuffle, repeat, orig)

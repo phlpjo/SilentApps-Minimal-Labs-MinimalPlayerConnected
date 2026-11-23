@@ -29,6 +29,7 @@ import androidx.media3.extractor.metadata.id3.TextInformationFrame
 import androidx.media3.session.CommandButton
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
+import org.json.JSONObject
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.session.LibraryResult
 import androidx.media3.session.MediaLibraryService
@@ -69,7 +70,7 @@ class PlaybackService : MediaLibraryService() {
     private var session: MediaLibrarySession? = null
     private lateinit var exo: ExoPlayer
     /** Lautsprecher im Heimnetz (null = Wiedergabe auf dem Handy) */
-    private var remote: RemotePlayer? = null
+    private var remote: Outlet? = null
     /** Der gerade aktive Player */
     private val player: Player get() = remote ?: exo
     private lateinit var localWrap: SessionPlayer
@@ -127,6 +128,40 @@ class PlaybackService : MediaLibraryService() {
         scope.launch { Sleep.endOfFile.collect { exo.pauseAtEndOfMediaItems = it; remote?.pauseAtEnd = it } }
         scope.launch { Connect.wanted.collect { switchTo(it) } }
         scope.launch { Fx.changed.collect { applyFx() } }
+        // Fernsteuerung: dem PC melden, was hier läuft, und seine Befehle ausführen
+        PcRemote.phoneState = state@{
+            if (remote is PcPlayer) return@state null // steuert gerade den PC – nichts Eigenes zu melden
+            val p = player
+            val mi = p.currentMediaItem ?: return@state null
+            val md = mi.mediaMetadata
+            JSONObject().apply {
+                put("playing", p.isPlaying || (p.playWhenReady && p.playbackState == Player.STATE_BUFFERING))
+                put("title", (md.title ?: md.displayTitle ?: "").toString())
+                put("artist", (md.artist ?: "").toString())
+                put("pos", p.currentPosition / 1000.0)
+                put("dur", if (p.duration > 0) p.duration / 1000.0 else 0.0)
+                put("volume", if (remote != null) p.deviceVolume / 100.0 else exo.volume.toDouble())
+                put("output", Connect.active.value?.name ?: getString(R.string.this_phone))
+            }
+        }
+        PcRemote.phoneExec = { c ->
+            val p = player
+            when (c.optString("cmd")) {
+                "toggle" -> if (p.playWhenReady) p.pause() else p.play()
+                "play" -> p.play()
+                "pause" -> p.pause()
+                "next" -> p.seekToNext()
+                "prev" -> p.seekToPrevious()
+                "volume" -> {
+                    val v = c.optDouble("vol", -1.0)
+                    if (v >= 0) {
+                        if (remote != null) p.setDeviceVolume((v * 100).toInt().coerceIn(0, 100), 0)
+                        else exo.volume = v.toFloat().coerceIn(0f, 1f)
+                    }
+                }
+            }
+        }
+        PcRemote.acquire()
         scope.launch { Library.stars.collect { applyButtons() } }
     }
 
@@ -144,6 +179,9 @@ class PlaybackService : MediaLibraryService() {
     }
 
     override fun onDestroy() {
+        PcRemote.phoneState = null
+        PcRemote.phoneExec = null
+        PcRemote.release()
         save()
         Sleep.cancel()
         stopShake()
@@ -397,7 +435,7 @@ class PlaybackService : MediaLibraryService() {
                 exo.playWhenReady = play
             }
         } else {
-            val r = RemotePlayer(this, t) { reason -> lost(reason) }
+            val r: Outlet = if (t.pc) PcPlayer(this, t) { reason -> lost(reason) } else RemotePlayer(this, t) { reason -> lost(reason) }
             r.pauseAtEnd = Sleep.endOfFile.value
             r.addListener(listener)
             remote = r
@@ -435,7 +473,8 @@ class PlaybackService : MediaLibraryService() {
     /** Während auf dem Lautsprecher gespielt wird: WLAN und CPU wach halten (sonst stockt die Übertragung) */
     @Suppress("DEPRECATION")
     private fun updateLocks() {
-        val need = remote?.isPlaying == true
+        // Steuern des PCs braucht keine Daueraufwach-Sperre – nur echtes Streamen zum Lautsprecher
+        val need = remote !is PcPlayer && remote?.isPlaying == true
         try {
             if (need) {
                 if (wifiLock == null) wifiLock = (applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager)

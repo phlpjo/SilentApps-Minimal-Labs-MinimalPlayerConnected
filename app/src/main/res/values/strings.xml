@@ -215,4 +215,7 @@
     <string name="pc_home_note">All music on this phone lives here, arranged like your library. New music you put in here is sent to the computer; what you sort there moves here too.</string>
     <string name="pc_home_missing">Choose a main folder (Settings) – new music from it goes to the computer, offline copies land there.</string>
     <string name="pc_settings_none">Not connected. With Minimal Library on your computer, “Music” shows your whole library.</string>
+    <string name="pc_lost">Connection to the computer lost – playing here again</string>
+    <string name="on_computer">Computer</string>
+    <string name="pc_playing_fmt">Playing on %1$s: %2$s</string>
 </resources>

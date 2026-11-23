@@ -518,6 +518,7 @@ private fun FolderMenu(ui: Actions, section: Int, f: Entry.Folder, onDone: () ->
 /** Unten: Zeitlinie zum Ziehen (Spulen), Titel, Zeit, Play/Pause. Titel antippen öffnet den Player. */
 @Composable
 fun MiniPlayer(ui: Actions, now: NowPlaying) {
+    PcHint(now)
     val item = now.item ?: return
     val c = ui.controller ?: return
     val pos by produceState(c.currentPosition, c, item) {
@@ -746,4 +747,22 @@ fun mailLabs(ctx: android.content.Context, app: String) {
     try {
         ctx.startActivity(android.content.Intent(android.content.Intent.ACTION_SENDTO, uri).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
     } catch (_: Exception) { }
+}
+
+/** Spielt gerade der Computer (und nicht dieses Handy)? Kurz anzeigen – antippen übernimmt die Steuerung */
+@Composable
+fun PcHint(now: NowPlaying) {
+    val n by PcRemote.now.collectAsState()
+    val active by Connect.active.collectAsState()
+    val p = n ?: return
+    if (!p.playing || active != null || now.playing) return
+    val where = p.outputName.ifBlank { p.computer }
+    Row(
+        Modifier.fillMaxWidth().tap { Connect.select(PcRemote.target(p.outputId, p.outputName)) }.padding(horizontal = 24.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Glyph("laptop", 16.dp, Dim)
+        Spacer(Modifier.width(10.dp))
+        T(stringResource(R.string.pc_playing_fmt, where, listOf(p.title, p.artist).filter { it.isNotBlank() }.joinToString(" – ")), size = 13.sp, color = Dim, maxLines = 1)
+    }
 }

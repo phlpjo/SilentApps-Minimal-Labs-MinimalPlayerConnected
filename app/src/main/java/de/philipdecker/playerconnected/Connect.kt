@@ -42,6 +42,9 @@ data class Target(
     /** Sonos: Lautstärke der ganzen Gruppe */
     val grc: Svc?,
     val group: Int = 1,
+    /** Minimal Library am Computer (Fernsteuerung) – pcOutput = Ausgabe dort (local = Lautsprecher des PCs) */
+    val pc: Boolean = false,
+    val pcOutput: String = "",
 )
 
 /**

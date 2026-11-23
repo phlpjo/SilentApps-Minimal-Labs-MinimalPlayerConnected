@@ -256,6 +256,7 @@ class MainActivity : ComponentActivity(), Actions {
         Sync.refresh()
         // Solange die App offen ist (jeder Bildschirm): Verbindung zu Minimal Library
         Pc.start(this)
+        PcRemote.acquire()
         val token = SessionToken(this, ComponentName(this, PlaybackService::class.java))
         val f = MediaController.Builder(this, token).buildAsync()
         future = f
@@ -272,6 +273,7 @@ class MainActivity : ComponentActivity(), Actions {
 
     override fun onStop() {
         super.onStop()
+        PcRemote.release()
         Pc.stop()
         ctrl?.removeListener(listener)
         future?.let { MediaController.releaseFuture(it) }

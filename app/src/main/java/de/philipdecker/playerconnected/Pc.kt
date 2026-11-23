@@ -235,6 +235,19 @@ object Pc {
         } finally { c.disconnect() }
     }
 
+    /** Kurze Anfrage an den PC (Fernsteuerung); null = nicht gekoppelt/erreichbar */
+    fun call(method: String, path: String, body: String? = null, timeout: Int = 3000): Pair<Int, String>? {
+        if (token.isEmpty() || addr.isEmpty()) return null
+        return try { request(method, "http://$addr$path", body, timeout) } catch (_: Exception) { null }
+    }
+
+    /** PC-Titel nach ihrer ID am PC (für die Übergabe der Warteschlange) */
+    suspend fun tracksByTid(): Map<Long, Track> = withContext(Dispatchers.IO) {
+        val m = HashMap<Long, Track>()
+        for (r in roots()) for (t in Library.dao.tracksOfRoot(r.uri)) trackIdOf(t.uri)?.let { m[it] = t }
+        m
+    }
+
     private fun api(method: String, path: String, body: String? = null): String {
         val (st, text) = request(method, "http://$addr$path", body)
         if (st !in 200..299) throw IllegalStateException(text.ifBlank { "Fehler $st" })

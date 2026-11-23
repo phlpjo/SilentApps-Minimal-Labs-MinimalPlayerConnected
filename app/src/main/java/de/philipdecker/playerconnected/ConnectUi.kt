@@ -42,7 +42,7 @@ fun OutputLine(ui: Actions, now: NowPlaying, modifier: Modifier = Modifier) {
             Modifier.tap { open = true }.padding(horizontal = 12.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Glyph(if (active != null) "speaker" else "cast", 18.dp, if (active != null) Ink else Dim)
+            Glyph(if (active?.pc == true) "laptop" else if (active != null) "speaker" else "cast", 18.dp, if (active != null) Ink else Dim)
             Spacer(Modifier.width(10.dp))
             T(name, size = 15.sp, color = if (active != null) Ink else Dim, glow = active != null, maxLines = 1)
         }
@@ -57,7 +57,7 @@ fun OutputMini(ui: Actions, now: NowPlaying, modifier: Modifier = Modifier) {
     val active by Connect.active.collectAsState()
     var open by remember { mutableStateOf(false) }
     if (active == null) return
-    Glyph("speaker", 18.dp, Ink, modifier.tap { open = true })
+    Glyph(if (active?.pc == true) "laptop" else "speaker", 18.dp, Ink, modifier.tap { open = true })
     if (open) OutputSheet(ui, now) { open = false }
 }
 
@@ -89,6 +89,22 @@ fun OutputSheet(ui: Actions, now: NowPlaying, onDone: () -> Unit) {
                     waiting = wanted?.id == d.id && active?.id != d.id,
                     modifier = Modifier.depth(list, d.id),
                 ) { Connect.select(d); onDone() }
+            }
+        }
+        // Computer mit Minimal Library: dessen Ausgänge (der PC selbst, seine Lautsprecher)
+        val pcNow by PcRemote.now.collectAsState()
+        pcNow?.let { n ->
+            if (n.outputs.isNotEmpty()) {
+                Spacer(Modifier.height(10.dp))
+                Caption(n.computer.ifBlank { stringResource(R.string.on_computer) })
+                n.outputs.forEach { (id, name) ->
+                    val on = active?.pc == true && active?.pcOutput == id
+                    Device(
+                        if (id.isEmpty() || id == "local") "laptop" else "speaker", name,
+                        if (n.outputId == id && n.playing) n.title else null,
+                        on = on, waiting = wanted?.id == "pc:$id" && !on,
+                    ) { Connect.select(PcRemote.target(id, name)); onDone() }
+                }
             }
         }
         if (searching) T(stringResource(R.string.searching_devices), size = 14.sp, color = Faint, modifier = Modifier.padding(vertical = 8.dp))
