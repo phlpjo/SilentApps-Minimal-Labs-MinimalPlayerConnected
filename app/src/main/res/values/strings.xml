@@ -196,6 +196,10 @@
     <string name="pc_intro">Your Minimal Library on the phone: all folders and playlists, play directly, edit playlists and keep folders or playlists offline. On the computer: Minimal Library → Settings → Minimal Player Connected shows the code.</string>
     <string name="pc_tap_to_pair">Tap to pair</string>
     <string name="pc_none_found">No computer found. Is Minimal Library running in the same Wi-Fi with sharing switched on?</string>
+    <string name="pc_manual">Enter address</string>
+    <string name="pc_manual_hint">For VPN or a NAS: its address on your home network, e.g. 192.168.1.20. Minimal Library Stream shows it on its page.</string>
+    <string name="pc_manual_title">Address of the computer or NAS</string>
+    <string name="pc_manual_bad">Could not read the address – e.g. 192.168.1.20 or 192.168.1.20:47830</string>
     <string name="pc_search_again">Search again</string>
     <string name="pc_code_title">Code from Minimal Library on %s</string>
     <string name="pc_offline_on">Make available offline</string>

@@ -89,6 +89,8 @@ fun PcPairing() {
     var found by remember { mutableStateOf<List<Pc.Found>?>(null) }
     var searching by remember { mutableStateOf(false) }
     var chosen by remember { mutableStateOf<Pc.Found?>(null) }
+    var manual by remember { mutableStateOf(false) }
+    val badAddr = stringResource(R.string.pc_manual_bad)
     var error by remember { mutableStateOf<String?>(null) }
     val search: () -> Unit = {
         searching = true
@@ -107,6 +109,15 @@ fun PcPairing() {
             if (found?.isEmpty() == true && !searching) T(stringResource(R.string.pc_none_found), size = 15.sp, color = Dim)
             error?.let { T(it, size = 15.sp, color = Ink, modifier = Modifier.padding(top = 8.dp)) }
             Option(if (searching) "…" else stringResource(R.string.pc_search_again), color = Dim) { if (!searching) search() }
+            // Über VPN oder in anderen Netzen findet die Suche nichts → Adresse von Hand
+            Option(stringResource(R.string.pc_manual), color = Dim) { manual = true }
+            T(stringResource(R.string.pc_manual_hint), size = 12.sp, color = Faint)
+        }
+    }
+    if (manual) {
+        NameInput(stringResource(R.string.pc_manual_title), "", onCancel = { manual = false }) { a ->
+            manual = false
+            Pc.manualAddr(a)?.let { chosen = Pc.Found("", it, it) } ?: run { error = badAddr }
         }
     }
     chosen?.let { f ->

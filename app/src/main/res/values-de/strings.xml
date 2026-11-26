@@ -196,6 +196,10 @@
     <string name="pc_tap_to_pair">Antippen zum Koppeln</string>
     <string name="pc_none_found">Kein Computer gefunden. Läuft Minimal Library im selben WLAN und ist die Freigabe eingeschaltet?</string>
     <string name="pc_search_again">Erneut suchen</string>
+    <string name="pc_manual">Adresse eingeben</string>
+    <string name="pc_manual_hint">Für VPN oder ein NAS: die Adresse im Heimnetz, z. B. 192.168.1.20. Minimal Library Stream zeigt sie auf seiner Seite.</string>
+    <string name="pc_manual_title">Adresse des Computers oder NAS</string>
+    <string name="pc_manual_bad">Adresse nicht lesbar – z. B. 192.168.1.20 oder 192.168.1.20:47830</string>
     <string name="pc_code_title">Code aus Minimal Library auf %s</string>
     <string name="pc_offline_on">Offline verfügbar machen</string>
     <string name="pc_offline_off">Nicht mehr offline</string>

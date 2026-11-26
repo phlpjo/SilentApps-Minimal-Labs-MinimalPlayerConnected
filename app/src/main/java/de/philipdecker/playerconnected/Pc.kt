@@ -152,16 +152,28 @@ object Pc {
     }
 
     /** Mit dem Code aus Minimal Library (Einstellungen) koppeln. null = ok, sonst Fehlertext */
+    /** Von Hand eingegebene Adresse („192.168.1.20“, „nas.local:47830“, „http://…“) → „host:port“, sonst null */
+    fun manualAddr(input: String): String? {
+        var s = input.trim().removePrefix("http://").removePrefix("https://").trimEnd('/')
+        if (s.isEmpty() || s.contains(' ') || s.contains('/')) return null
+        val hasPort = if (s.startsWith("[")) s.contains("]:") else s.count { it == ':' } == 1
+        if (!hasPort) s = "$s:47830"
+        return s
+    }
+
     suspend fun pair(f: Found, code: String): String? = withContext(Dispatchers.IO) {
         try {
             val (st, body) = request("POST", "http://${f.addr}/pair", code.filter { it.isDigit() }, headers = mapOf("X-Client" to Saf.deviceName(app)))
             if (st == 403) return@withContext app.getString(R.string.pc_code_wrong)
+            if (st == 503) return@withContext app.getString(R.string.pc_err_503)
             if (st != 200) return@withContext "$st"
             val o = JSONObject(body)
-            if (f.id != id) clearMirror()
-            sp().edit().putString("id", o.optString("id", f.id)).putString("name", f.name).putString("token", o.getString("token"))
+            val newId = o.optString("id", f.id)
+            val name = o.optString("name", "").ifBlank { f.name }
+            if (newId != id) clearMirror()
+            sp().edit().putString("id", newId).putString("name", name).putString("token", o.getString("token"))
                 .putString("addr", f.addr).remove("version").apply()
-            state.value = State(paired = true, name = f.name, online = true)
+            state.value = State(paired = true, name = name, online = true)
             refresh()
             null
         } catch (e: Exception) { e.message ?: "Fehler" }
