@@ -179,6 +179,14 @@
     <string name="pc_code_wrong">Wrong code</string>
     <string name="pc_unpaired">This phone is no longer paired – please pair again</string>
     <string name="pc_errors_fmt">%d errors</string>
+    <string name="pc_errors_why_fmt">%1$d not loaded – %2$s</string>
+    <string name="pc_home_needed">Choose the main folder on this phone first – offline copies are stored there.</string>
+    <string name="pc_err_404">Track is not in a shared music folder on the computer</string>
+    <string name="pc_err_401">Pairing expired – reconnect in Settings</string>
+    <string name="pc_err_503">Sharing is turned off in Minimal Library</string>
+    <string name="pc_err_noaddr">Computer not reachable</string>
+    <string name="pc_err_save">Could not save to the main folder (%s)</string>
+    <string name="pc_err_offline">Will download as soon as the computer is reachable.</string>
     <string name="pc_loading">Loading library …</string>
     <string name="pc_syncing">updating …</string>
     <string name="pc_online">connected</string>

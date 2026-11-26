@@ -171,6 +171,7 @@ class MainActivity : ComponentActivity(), Actions {
         prefs = Prefs.get(this)
         Library.init(this)
         Pc.init(this)
+        Pc.pickHome = { pickHome() }
         if (intent?.getBooleanExtra("player", false) == true) stack.add(Screen.Player)
         takeExternal(intent)
 
@@ -285,6 +286,7 @@ class MainActivity : ComponentActivity(), Actions {
 
     override fun onDestroy() {
         super.onDestroy()
+        if (Pc.pickHome != null) Pc.pickHome = null
         scope.cancel()
     }
 

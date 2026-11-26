@@ -178,6 +178,14 @@
     <string name="pc_code_wrong">Code falsch</string>
     <string name="pc_unpaired">Dieses Handy ist nicht mehr gekoppelt – bitte neu koppeln</string>
     <string name="pc_errors_fmt">%d Fehler</string>
+    <string name="pc_errors_why_fmt">%1$d nicht geladen – %2$s</string>
+    <string name="pc_home_needed">Für Offline-Kopien erst den Hauptordner auf dem Handy wählen.</string>
+    <string name="pc_err_404">Titel liegt am Computer nicht in einem freigegebenen Musikordner</string>
+    <string name="pc_err_401">Kopplung abgelaufen – in den Einstellungen neu verbinden</string>
+    <string name="pc_err_503">Freigabe in Minimal Library ist ausgeschaltet</string>
+    <string name="pc_err_noaddr">Computer nicht erreichbar</string>
+    <string name="pc_err_save">Speichern im Hauptordner fehlgeschlagen (%s)</string>
+    <string name="pc_err_offline">Wird geladen, sobald der Computer erreichbar ist.</string>
     <string name="pc_loading">Lade Bibliothek …</string>
     <string name="pc_syncing">aktualisiere …</string>
     <string name="pc_online">verbunden</string>

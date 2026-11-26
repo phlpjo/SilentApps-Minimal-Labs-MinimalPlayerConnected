@@ -131,13 +131,17 @@ fun TransferLine(modifier: Modifier = Modifier) {
     val u by Pc.upload.collectAsState()
     val o by Pc.offline.collectAsState()
     val e by Library.export.collectAsState()
+    // Fehler beim Offline-Laden kurz in jedem Bildschirm zeigen, nicht nur im Bereich PC
+    var errGone by remember(o) { mutableStateOf(false) }
+    androidx.compose.runtime.LaunchedEffect(o) { kotlinx.coroutines.delay(12_000); errGone = true }
     val text = when {
         u != null && u?.finished == false -> stringResource(R.string.pc_upload_fmt, u!!.done, u!!.total)
         o != null && o?.finished == false -> stringResource(R.string.pc_offline_progress_fmt, o!!.done, o!!.total)
+        o?.error != null && !errGone -> o!!.error
         e != null && e?.finished == false -> stringResource(R.string.export_progress_fmt, e!!.done, e!!.total)
         else -> null
     } ?: return
-    T(text, size = 12.sp, color = Dim, spacing = 0.8.sp, maxLines = 1, align = androidx.compose.ui.text.style.TextAlign.Center, modifier = modifier.fillMaxWidth())
+    T(text, size = 12.sp, color = Dim, spacing = 0.8.sp, maxLines = 2, align = androidx.compose.ui.text.style.TextAlign.Center, modifier = modifier.fillMaxWidth())
 }
 
 /** Einstellungen: Minimal Library (Computer) – verbinden, Hauptordner, entkoppeln */

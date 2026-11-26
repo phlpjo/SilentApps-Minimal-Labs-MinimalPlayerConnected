@@ -623,7 +623,15 @@ object Pc {
     fun folderPin(root: String, path: String) = "d|$root|$path"
     fun playlistPin(uid: String) = "l|$uid"
 
+    /** Von der Activity gesetzt: Ordnerauswahl für den Hauptordner öffnen */
+    var pickHome: (() -> Unit)? = null
+
     fun setPinned(key: String, on: Boolean) {
+        // Ohne Hauptordner gibt es keinen Platz für Offline-Kopien → direkt danach fragen
+        if (on && home() == null) {
+            offline.value = OfflineStatus(0, 0, null, true, app.getString(R.string.pc_home_needed))
+            pickHome?.invoke()
+        }
         val s = pins().toMutableSet()
         if (on) s += key else s -= key
         sp().edit().putStringSet("pins", s).apply()
@@ -662,6 +670,7 @@ object Pc {
         var changed = false
         // 1. Bekannte Dateien: am PC gelöscht → weg; umsortiert → mitziehen
         val unknown = ArrayList<Saf.Entry>()
+        var toUpload: List<Saf.Entry> = emptyList()
         for (f in audio) {
             val tid = relToId[f.rel.lowercase()]
             if (tid == null) { unknown += f; continue }
@@ -699,7 +708,68 @@ object Pc {
                 }
             } catch (_: Exception) { }
             for (f in unknown) found[f.rel]?.let { tid -> files[tid] = f.rel; docs[tid] = f.uri; own += tid; present += tid; changed = true }
-            if (missing.isNotEmpty()) {
+            toUpload = missing
+        }
+        // 3. Gewünscht: offline markierte Ordner/Playlisten + alles, was vom Handy kam
+        val want = HashMap<Long, Track>()
+        for (k in pins()) when {
+            k.startsWith("d|") -> {
+                val root = k.removePrefix("d|").substringBefore('|')
+                val path = k.removePrefix("d|$root|")
+                Library.dao.subtree(root, path).forEach { t -> trackIdOf(t.uri)?.let { want[it] = t } }
+            }
+            k.startsWith("l|") -> Library.dao.playlistByUid(k.removePrefix("l|"))?.let { p -> Library.playlistTracks(p.id).forEach { pt -> trackIdOf(pt.track.uri)?.let { want[it] = pt.track } } }
+        }
+        for (tid in own) pcTracks[tid]?.let { want[tid] = it }
+        // 4. Fehlende herunterladen (vor dem Hochladen, damit „offline verfügbar“ nicht hinter langen Uploads wartet)
+        val todo = want.filter { (tid, _) -> tid !in present }
+        var done = 0
+        var failed = 0
+        var why: String? = null
+        if (state.value.online) {
+            offline.value = OfflineStatus(0, todo.size, null, todo.isEmpty())
+            for ((tid, t) in todo) {
+                val url = httpUrl(t.uri)
+                if (url == null) { failed++; why = why ?: app.getString(R.string.pc_err_noaddr); done++; continue }
+                offline.value = OfflineStatus(done, todo.size, Library.label(t), false)
+                try {
+                    val rel = expectedRel(t, names)
+                    val c = URL(url).openConnection() as HttpURLConnection
+                    c.connectTimeout = 8000; c.readTimeout = 60_000
+                    try {
+                        val code = c.responseCode
+                        if (code != 200) {
+                            why = why ?: when (code) {
+                                404 -> app.getString(R.string.pc_err_404)
+                                401 -> app.getString(R.string.pc_err_401)
+                                503 -> app.getString(R.string.pc_err_503)
+                                else -> "HTTP $code"
+                            }
+                            throw IllegalStateException("$code")
+                        }
+                        docs[tid] = c.inputStream.use { Saf.saveFile(ctx, homeUri, rel, it) }
+                        files[tid] = rel
+                        present += tid
+                        changed = true
+                    } finally { c.disconnect() }
+                    try {
+                        val (st, body) = request("GET", "http://$addr/l/$tid", timeout = 4000)
+                        if (st == 200 && body.isNotBlank()) Saf.saveFile(ctx, homeUri, lrcOf(rel), body.byteInputStream())
+                    } catch (_: Exception) { }
+                } catch (e: Exception) {
+                    failed++
+                    if (why == null) why = if (e is IllegalStateException) e.message else app.getString(R.string.pc_err_save, e.message ?: e.javaClass.simpleName)
+                }
+                done++
+                if (done % 10 == 0) saveHomeMap()
+            }
+            offline.value = OfflineStatus(done, todo.size, null, true, if (failed > 0) app.getString(R.string.pc_errors_why_fmt, failed, why ?: "") else null)
+            saveHomeMap()
+        }
+        // 4b. Neue Musik vom Handy an den PC schicken
+        if (toUpload.isNotEmpty() && state.value.online) {
+            val missing = toUpload
+            run {
                 upload.value = UpStatus(0, missing.size, false)
                 var n = 0
                 for (f in missing) {
@@ -715,45 +785,6 @@ object Pc {
                 dirty = true // neue Titel → beim nächsten Abgleich an ihren Platz ziehen
             }
         }
-        // 3. Gewünscht: offline markierte Ordner/Playlisten + alles, was vom Handy kam
-        val want = HashMap<Long, Track>()
-        for (k in pins()) when {
-            k.startsWith("d|") -> {
-                val root = k.removePrefix("d|").substringBefore('|')
-                val path = k.removePrefix("d|$root|")
-                Library.dao.subtree(root, path).forEach { t -> trackIdOf(t.uri)?.let { want[it] = t } }
-            }
-            k.startsWith("l|") -> Library.dao.playlistByUid(k.removePrefix("l|"))?.let { p -> Library.playlistTracks(p.id).forEach { pt -> trackIdOf(pt.track.uri)?.let { want[it] = pt.track } } }
-        }
-        for (tid in own) pcTracks[tid]?.let { want[tid] = it }
-        // 4. Fehlende herunterladen
-        val todo = want.filter { (tid, _) -> tid !in present }
-        var done = 0
-        var failed = 0
-        if (state.value.online) {
-            offline.value = OfflineStatus(0, todo.size, null, todo.isEmpty())
-            for ((tid, t) in todo) {
-                val url = httpUrl(t.uri) ?: break
-                offline.value = OfflineStatus(done, todo.size, Library.label(t), false)
-                try {
-                    val rel = expectedRel(t, names)
-                    val c = URL(url).openConnection() as HttpURLConnection
-                    c.connectTimeout = 5000; c.readTimeout = 60_000
-                    try {
-                        if (c.responseCode != 200) throw IllegalStateException("${c.responseCode}")
-                        docs[tid] = c.inputStream.use { Saf.saveFile(ctx, homeUri, rel, it) }
-                        files[tid] = rel
-                        changed = true
-                    } finally { c.disconnect() }
-                    try {
-                        val (st, body) = request("GET", "http://$addr/l/$tid", timeout = 4000)
-                        if (st == 200 && body.isNotBlank()) Saf.saveFile(ctx, homeUri, lrcOf(rel), body.byteInputStream())
-                    } catch (_: Exception) { }
-                } catch (_: Exception) { failed++ }
-                done++
-                if (done % 10 == 0) saveHomeMap()
-            }
-        }
         // 5. Nicht mehr gewünschte Kopien entfernen (nur vom PC geholte; Eigenes bleibt)
         for (tid in files.keys.toList()) {
             if (tid in want || tid in own) continue
@@ -764,7 +795,7 @@ object Pc {
         for (tid in files.keys.toList()) if (tid !in present && tid !in todo.keys) { files.remove(tid); docs.remove(tid); own.remove(tid); changed = true }
         if (changed) Saf.removeEmptyDirs(ctx, homeUri)
         saveHomeMap()
-        offline.value = OfflineStatus(done, todo.size, null, true, if (failed > 0) app.getString(R.string.pc_errors_fmt, failed) else null)
+        if (!state.value.online && pins().isNotEmpty() && todo.isNotEmpty()) offline.value = OfflineStatus(0, todo.size, null, true, app.getString(R.string.pc_err_offline))
         if (changed) Library.version.value++
     }
 
