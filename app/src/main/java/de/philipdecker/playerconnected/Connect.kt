@@ -207,9 +207,10 @@ object Connect {
 
     /** Sonos: je Gruppe ein Eintrag (Koordinator steuert), unsichtbare Mitglieder (Surround, Sub) ausgeblendet */
     private fun sonosGroups(sonos: List<Desc>): List<Target>? {
-        val zgt = sonos.firstNotNullOfOrNull { it.services["ZoneGroupTopology"] } ?: return null
-        val state = try { Upnp.value(Upnp.soap(zgt, "GetZoneGroupState", emptyList()), "ZoneGroupState") } catch (_: Exception) { null } ?: return null
-        val doc = try { Upnp.xml(state) } catch (_: Exception) { return null }
+        // Jede Box kennt die Gruppen – antwortet eine nicht (Schlaf, Sub, kurz weg), die nächste fragen
+        val doc = sonos.mapNotNull { it.services["ZoneGroupTopology"] }.distinctBy { it.url }.firstNotNullOfOrNull { zgt ->
+            try { Upnp.xml(Upnp.value(Upnp.soap(zgt, "GetZoneGroupState", emptyList(), timeout = 8000), "ZoneGroupState") ?: return@firstNotNullOfOrNull null) } catch (_: Exception) { null }
+        } ?: return null
         val groups = doc.getElementsByTagName("ZoneGroup")
         val out = ArrayList<Target>()
         for (i in 0 until groups.length) {
@@ -233,6 +234,32 @@ object Connect {
         }
         return out.takeIf { it.isNotEmpty() }
     }
+}
+
+/**
+ * Sonos: Titel dürfen nur an die steuernde Box einer Gruppe gehen – an ein anderes Mitglied geschickt,
+ * verlässt diese Box die Gruppe. Die steuernde Box kann wechseln, deshalb vor jedem Titel nachsehen.
+ * Gibt die AVTransport-Steuerung der aktuell steuernden Box zurück (oder null, wenn unklar).
+ */
+fun sonosCoordinatorAvt(t: Target): Svc? {
+    if (!t.sonos) return null
+    return try {
+        val zgt = Svc("urn:schemas-upnp-org:service:ZoneGroupTopology:1", "http://${t.host}:1400/ZoneGroupTopology/Control")
+        val doc = Upnp.xml(Upnp.value(Upnp.soap(zgt, "GetZoneGroupState", emptyList(), timeout = 4000), "ZoneGroupState") ?: return null)
+        val groups = doc.getElementsByTagName("ZoneGroup")
+        val me = t.id.removePrefix("uuid:").substringBefore("::")
+        for (i in 0 until groups.length) {
+            val g = groups.item(i) as? org.w3c.dom.Element ?: continue
+            val coord = g.getAttribute("Coordinator")
+            val members = (0 until g.childNodes.length).mapNotNull { g.childNodes.item(it) as? org.w3c.dom.Element }
+                .filter { it.tagName == "ZoneGroupMember" }
+            if (coord != me && members.none { it.getAttribute("UUID") == me || java.net.URL(it.getAttribute("Location").ifEmpty { "http://x/" }).host == t.host }) continue
+            val loc = members.firstOrNull { it.getAttribute("UUID") == coord }?.getAttribute("Location")?.takeIf { it.isNotEmpty() } ?: return null
+            val u = java.net.URL(loc)
+            return Svc(t.avt.type, "http://${u.host}:${if (u.port > 0) u.port else 1400}/MediaRenderer/AVTransport/Control")
+        }
+        null
+    } catch (_: Exception) { null }
 }
 
 /** Kleine UPnP-Hilfen: SOAP-Aufrufe, XML, Zeitformat */

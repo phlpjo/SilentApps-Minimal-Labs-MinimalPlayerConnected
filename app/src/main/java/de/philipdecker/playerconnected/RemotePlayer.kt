@@ -330,8 +330,11 @@ class RemotePlayer(
 
     // ───────── Laden & Steuern ─────────
 
+    /** Sonos: aktuell steuernde Box der Gruppe (kann wechseln) */
+    @Volatile private var liveAvt: Svc? = null
+
     private fun avt(action: String, vararg args: Pair<String, String>): String =
-        Upnp.soap(target.avt, action, listOf("InstanceID" to "0") + args)
+        Upnp.soap(liveAvt ?: target.avt, action, listOf("InstanceID" to "0") + args)
 
     private fun seekRemote(ms: Long) {
         // Lautsprecher nimmt Spulen erst an, wenn der Titel geladen ist → ein paar Versuche
@@ -357,6 +360,7 @@ class RemotePlayer(
             try {
                 val pub = Serve.publish(ctx, target.host, e.item)
                 val meta = didl(e.item, pub)
+                if (target.sonos) sonosCoordinatorAvt(target)?.let { liveAvt = it }
                 avt("SetAVTransportURI", "CurrentURI" to pub.url, "CurrentURIMetaData" to meta)
                 var seekLater: Long? = null
                 if (play) {
